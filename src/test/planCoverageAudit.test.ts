@@ -8,7 +8,6 @@ const root = process.cwd();
 /** p11: critical plan artifacts must exist and reference live modules. */
 const REQUIRED_PATHS = [
 	"plan/VISION_FLOW_MASTER.plan.md",
-	"plan/CODE_STRUCTURE_OPTIMIZATION.plan.md",
 	"docs/PLAN_COVERAGE.md",
 	"src/memory/longTermMemory.ts",
 	"src/memory/memoryTokenBudget.ts",

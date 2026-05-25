@@ -1,7 +1,7 @@
 # 计划覆盖索引
 
 > 执行与验收的**唯一入口**为 [`plan/VISION_FLOW_MASTER.plan.md`](../plan/VISION_FLOW_MASTER.plan.md)。  
-> 代码结构分阶段清单见 [`plan/CODE_STRUCTURE_OPTIMIZATION.plan.md`](../plan/CODE_STRUCTURE_OPTIMIZATION.plan.md)。
+> 代码结构优化与风险审计分阶段工作已闭环（原 `CODE_STRUCTURE_OPTIMIZATION` / `RISK_AUDIT_AND_REMEDIATION` 计划已删除；行为以代码、`npm test`、`verify:ci` 与 Host UI acceptance 为准）。
 
 ## 阶段速查（p0–p11）
 

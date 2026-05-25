@@ -7,7 +7,9 @@ All notable changes to this project are documented here.
 ### Changed
 
 - **README** — removed the placeholder “Screenshots” section; added high-fidelity vision flow diagrams for **native** and **proxy** routes; added a **Visible settings guide** aligned with the configuration page and Phase 1 UI; expanded the generated configuration reference (integrity checks, defaults, restore-pipeline suspension note).
-- **Code structure** — split extension smoke/runtime modules, vision structured-pass routing, smoke log bridge, and `scripts/` / `tsconfig` layout per `plan/CODE_STRUCTURE_OPTIMIZATION.plan.md` (P1–P3 closed).
+- **Code structure** — split extension smoke/runtime modules, vision structured-pass routing, smoke log bridge, and `scripts/` / `tsconfig` layout (P1–P3 closed).
+- **Structured proxy vision** — proxy LM `sendRequest` + stream wrapped with `executeStructuredVisionLmWithRetry` (HTTP retry symmetric with native when `retry.enabled`).
+- **Provider transient errors** — Moonshot/OpenAI-compat `error.type` values such as `engine_overloaded` and `rate_limit_exceeded` are retryable.
 - **Host UI** — default chat acceptance runs **16** integration scenarios (canonical 17; `p7-chat-benchmark-web-restore` opt-in); stall gate uses executable turns; `p5-qwen-vl-native-chat` uses `native-vision` kind; log evidence validator aligns with live log-watch on `ok:false`.
 - **Vision retry** — structured vision pass honors `retry.enabled` (format loop + HTTP attempts).
 - **Release VSIX** — `.vscodeignore` excludes all `out/e2e/**`; smoke loads via dynamic `import` of `extensionSmokeActivation` only when `COPILOT_BRO_UI_SMOKE=1` (no static e2e bundle in `extension.js`).
@@ -16,7 +18,9 @@ All notable changes to this project are documented here.
 ### Added
 
 - Host UI chat acceptance (`npm run test:host-ui:chat-acceptance`, 16 default / 17 canonical) and README generation workflow (`npm run readme:generate` / `readme:check`).
-- `npm run catalog:verify` — fails when committed Qwen/Zhipu catalog artifacts drift after rebuild.
+- `npm run catalog:verify` — fails when committed Qwen/Zhipu/Kimi catalog artifacts drift after rebuild.
+- `npm run catalog:kimi` — regenerates Kimi/Moonshot families from `resources/kimi-model-cards.json`.
+- Dev npm scripts: `catalog:bailian:scrape`, `dev:recover-vision-proxy`, `dev:rebuild-vision-proxy-from-vsix`, `dev:recover-vision-proxy-from-transcript`.
 - Unit tests for `secretsStorage`, `visionStructuredRetryPolicy`, and release VSIX `out/e2e/**` deny policy.
 - Zhipu **GLM-4.6V FlashX** catalog family; `scripts/catalog/README.md` documents offline + live (`ZHIPU_API_KEY`) regeneration.
 
@@ -25,6 +29,10 @@ All notable changes to this project are documented here.
 - Host UI integration retry now covers **stream-phase** provider errors (429/1305) and advances through `zhipu.vision-native` paid fallbacks (`glm-4.6v-flashx`, `glm-4.6v`).
 - `verify-release-vsix.mjs` aligned with dynamic smoke activation (no static `e2e/hostUi/env` require).
 - `configPanel` reuses `smokeModeGate` for smoke detection.
+
+### Removed
+
+- Completed tracking plans `plan/CODE_STRUCTURE_OPTIMIZATION.plan.md` and `plan/RISK_AUDIT_AND_REMEDIATION.plan.md` (remediation and structure work are in tree, tests, and `docs/PLAN_COVERAGE.md`).
 
 ## [0.1.8] - 2026-05-09
 

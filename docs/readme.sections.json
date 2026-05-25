@@ -148,8 +148,8 @@
 			"zh": "🧪 本地开发",
 			"en": "🧪 Development"
 		},
-		"zh": "```bash\nnpm install\nnpm run compile\nnpm run lint\nnpm test\nnpm run readme:generate   # 从 docs/readme.* 生成 README.md\nnpm run readme:check      # 校验 README 与配置一致\nnpm run package:test\nnpm run package:release\nnpm run test:host-ui:chat-acceptance\n```\n\n不要直接编辑根目录 `README.md`；改 `docs/readme.sections.json` 与 `docs/readme.config.json` 后执行 `npm run readme:generate`。",
-		"en": "```bash\nnpm install\nnpm run compile\nnpm run lint\nnpm test\nnpm run readme:generate   # build README.md from docs/readme.*\nnpm run readme:check\nnpm run package:test\nnpm run package:release\nnpm run test:host-ui:chat-acceptance\n```\n\nDo not edit `README.md` by hand; change `docs/readme.sections.json` / `docs/readme.config.json`, then run `npm run readme:generate`."
+		"zh": "```bash\nnpm install\nnpm run compile\nnpm run lint\nnpm test\nnpm run readme:generate   # 从 docs/readme.* 生成 README.md\nnpm run readme:check      # 校验 README 与配置一致\nnpm run verify:ci         # catalog:verify + readme:check + package:verify\nnpm run catalog:build     # Qwen + Zhipu + Kimi 目录生成\nnpm run package:test\nnpm run package:release\nnpm run test:host-ui:chat-acceptance\n```\n\n不要直接编辑根目录 `README.md`；改 `docs/readme.sections.json` 与 `docs/readme.config.json` 后执行 `npm run readme:generate`。模型目录维护见 `scripts/catalog/README.md`（`catalog:zhipu` / `catalog:kimi` 等）。",
+		"en": "```bash\nnpm install\nnpm run compile\nnpm run lint\nnpm test\nnpm run readme:generate   # build README.md from docs/readme.*\nnpm run readme:check\nnpm run verify:ci         # catalog:verify + readme:check + package:verify\nnpm run catalog:build     # Qwen + Zhipu + Kimi catalog generators\nnpm run package:test\nnpm run package:release\nnpm run test:host-ui:chat-acceptance\n```\n\nDo not edit `README.md` by hand; change `docs/readme.sections.json` / `docs/readme.config.json`, then run `npm run readme:generate`. See `scripts/catalog/README.md` for `catalog:zhipu`, `catalog:kimi`, and related maintenance."
 	},
 	"test-vsix-vs-release-vsix": {
 		"title": {

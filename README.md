@@ -585,12 +585,14 @@ npm run lint
 npm test
 npm run readme:generate   # 从 docs/readme.* 生成 README.md
 npm run readme:check      # 校验 README 与配置一致
+npm run verify:ci         # catalog:verify + readme:check + package:verify
+npm run catalog:build     # Qwen + Zhipu + Kimi 目录生成
 npm run package:test
 npm run package:release
 npm run test:host-ui:chat-acceptance
 ```
 
-不要直接编辑根目录 `README.md`；改 `docs/readme.sections.json` 与 `docs/readme.config.json` 后执行 `npm run readme:generate`。
+不要直接编辑根目录 `README.md`；改 `docs/readme.sections.json` 与 `docs/readme.config.json` 后执行 `npm run readme:generate`。模型目录维护见 `scripts/catalog/README.md`（`catalog:zhipu` / `catalog:kimi` 等）。
 
 ### 🧪 测试包与发布包
 
@@ -1194,12 +1196,14 @@ npm run lint
 npm test
 npm run readme:generate   # build README.md from docs/readme.*
 npm run readme:check
+npm run verify:ci         # catalog:verify + readme:check + package:verify
+npm run catalog:build     # Qwen + Zhipu + Kimi catalog generators
 npm run package:test
 npm run package:release
 npm run test:host-ui:chat-acceptance
 ```
 
-Do not edit `README.md` by hand; change `docs/readme.sections.json` / `docs/readme.config.json`, then run `npm run readme:generate`.
+Do not edit `README.md` by hand; change `docs/readme.sections.json` / `docs/readme.config.json`, then run `npm run readme:generate`. See `scripts/catalog/README.md` for `catalog:zhipu`, `catalog:kimi`, and related maintenance.
 
 ### 🧪 Test VSIX vs Release VSIX
 
