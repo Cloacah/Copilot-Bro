@@ -27,6 +27,7 @@ import { sendChatCompletion } from "./openaiCompat/client";
 import { fingerprintAssistantTurn, readReasoningCache, ReasoningCache, writeReasoningCache } from "./reasoningCache";
 import { prependSelectedPromptPreset } from "./promptPresets";
 import { needsVision } from "./toolCooperation/needVisionDetector";
+import { countRequestImageParts } from "./visionProtocol/visionMessageScan";
 import { needsVisionFromRequestMessages } from "./visionProtocol/visionMessageScan";
 import { HostUiSmokeLogEvent } from "./visionProtocol/hostUiSmokeLogEvents";
 import { createVisionDetailsText } from "./toolCooperation/outputSemantics";
@@ -167,7 +168,9 @@ export class ExtendedModelsProvider implements LanguageModelChatProvider {
 		let trace = createRequestTrace(settings.requestAttribution);
 		const detectionMessages = convertMessages(messages, { ...model, vision: true }, roleIds);
 		const modelCapabilities = buildModelCapabilities(model, settings);
+		const hasAttachedImages = countRequestImageParts(messages) > 0;
 		const visionNeeded = !isVisionOrchestrationSuppressed()
+			&& hasAttachedImages
 			&& (needsVisionFromRequestMessages(messages, modelCapabilities, settings.visionProcessing)
 				|| needsVision(detectionMessages, modelCapabilities, settings.visionProcessing));
 		let strategySelection: ToolSelection | undefined;

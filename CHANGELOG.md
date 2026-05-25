@@ -26,6 +26,7 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
+- **Vision gate false positives** — file paths or filenames like `image_001.png` in chat text no longer trigger the vision branch or repeated `[Vision] start` UI; only attached image parts (or inline `data:image/...;base64`) count. Proxy route selection and status lines are skipped when no actionable image payload is present (no wasted vision API calls).
 - Host UI integration retry now covers **stream-phase** provider errors (429/1305) and advances through `zhipu.vision-native` paid fallbacks (`glm-4.6v-flashx`, `glm-4.6v`).
 - `verify-release-vsix.mjs` aligned with dynamic smoke activation (no static `e2e/hostUi/env` require).
 - `configPanel` reuses `smokeModeGate` for smoke detection.

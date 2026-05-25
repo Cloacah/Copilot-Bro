@@ -149,11 +149,12 @@ export async function runVisionPreRoute(input: VisionPreRouteInput): Promise<Vis
 }
 
 export async function runVisionStrategyBranch(input: VisionStrategyBranchInput): Promise<VisionStrategyBranchResult> {
-	const strategySelection = selectTool(true, input.modelCapabilities, input.settings.visionAgent);
 	const imageRefs = deduplicateRefs(
 		[...collectImageRefs([...input.detectionMessages]), ...collectImageRefsFromRequestMessages(input.messages)],
 		input.settings.visionAgent
 	);
+	const hasActionableImages = imageRefs.length > 0;
+	const strategySelection = selectTool(hasActionableImages, input.modelCapabilities, input.settings.visionAgent);
 	const plannedBatches = splitIntoBatches(imageRefs, input.settings.visionAgent.maxBatchSize);
 	const plannedBatchCount = plannedBatches.length;
 	const createdSession = imageRefs.length > 0 ? createSessionIfEnabled(input.settings.visionAgent) : undefined;
@@ -197,6 +198,15 @@ export async function runVisionStrategyBranch(input: VisionStrategyBranchInput):
 	switch (strategySelection.strategy) {
 		case "proxy":
 		case "wrapper-proxy": {
+			if (!hasActionableImages) {
+				input.logger.info("vision.proxy.skipped", {
+					model: input.model.id,
+					...trace,
+					plannedBatchCount,
+					reason: "Proxy route selected but no actionable image payload is attached to the request."
+				});
+				break;
+			}
 			input.reporter.appendProgress(
 				formatVisionStatus("start", strategySelection, trace, input.settings.requestAttribution)
 			);

@@ -19,14 +19,17 @@ export function needsVision(
 
 function hasImagePayload(message: OpenAIMessage): boolean {
 	if (typeof message.content === "string") {
-		return containsImageReference(message.content);
+		return containsInlineImageData(message.content);
 	}
 	if (!Array.isArray(message.content)) {
 		return false;
 	}
-	return message.content.some((part) => part.type === "image_url" || (part.type === "text" && containsImageReference(part.text)));
+	return message.content.some(
+		(part) => part.type === "image_url" || (part.type === "text" && containsInlineImageData(part.text))
+	);
 }
 
-function containsImageReference(text: string): boolean {
-	return /(data:image\/|https?:\/\/\S+\.(png|jpe?g|gif|webp|bmp|svg)|file:\/\/\/[^\s"'<>]+\.(png|jpe?g|gif|webp|bmp|svg)|[A-Za-z]:[\\/][^\s"'<>]+\.(png|jpe?g|gif|webp|bmp|svg)|(?:\.\.?[\\/])?[^\s"'<>]+\.(png|jpe?g|gif|webp|bmp|svg))/i.test(text);
+/** Only inline base64 image payloads count — not file paths or filenames mentioned in agent text. */
+function containsInlineImageData(text: string): boolean {
+	return /data:image\/[a-z0-9+.-]+;base64,/i.test(text);
 }

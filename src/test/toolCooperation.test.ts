@@ -141,6 +141,25 @@ test("needsVision respects needVisionGate and requires actionable image payload"
 	assert.equal(needsVision(sampleMessages, proxyCaps, { needVisionGate: false }), false);
 });
 
+test("needsVision ignores markdown file paths without image_url parts", () => {
+	const docScriptTurn: OpenAIMessage[] = [
+		{
+			role: "assistant",
+			content: [
+				{
+					type: "text",
+					text: "└── 【KOW】M_魔法之塔_assets/\n    ├── image_001.png\n    └── image_002.png"
+				}
+			]
+		},
+		{
+			role: "user",
+			content: "请运行 skill_doc_to_md 脚本重新生成文档，不需要识图。"
+		}
+	];
+	assert.equal(needsVision(docScriptTurn, proxyCaps, { needVisionGate: true }), false);
+});
+
 test("selectTool covers proxy, wrapper, native, text fallback, plan-only, and disabled strategies", () => {
 	assert.deepEqual(selectTool(true, proxyCaps, { enabled: true }), {
 		strategy: "proxy",
