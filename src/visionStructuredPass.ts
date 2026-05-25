@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { createHash } from "node:crypto";
 import type { ExtensionSettings, ModelConfig } from "./types";
 import {
+	executeStructuredVisionLmWithRetry,
 	resolveStructuredVisionFormatMaxAttempts,
 	resolveStructuredVisionHttpRetry
 } from "./visionStructuredRetryPolicy";
@@ -82,7 +83,7 @@ export async function resolveStructuredProxyDescription(
 ): Promise<{ description: string; execution: ProxyExecutionSummary; structured?: ProxyStructuredOutput }> {
 	return resolveStructuredVisionDescription(
 		(imageParts, prompt, attempt, maxAttempts, cancellation, opts) =>
-			requestStructuredProxyOutput(proxyModel, imageParts, prompt, attempt, maxAttempts, cancellation, opts),
+			requestStructuredProxyOutput(proxyModel, imageParts, prompt, attempt, maxAttempts, settings, cancellation, opts, logger),
 		imageParts,
 		basePrompt,
 		settings,
@@ -243,8 +244,10 @@ async function requestStructuredProxyOutput(
 	basePrompt: string,
 	attempt: number,
 	maxAttempts: number,
+	settings: ExtensionSettings,
 	token: vscode.CancellationToken,
-	options: { forceNonSvgMode?: boolean; handoffIntent?: VisionHandoffIntent } = {}
+	options: { forceNonSvgMode?: boolean; handoffIntent?: VisionHandoffIntent } = {},
+	logger?: Logger
 ): Promise<string> {
 	const handoffIntent = options.handoffIntent ?? resolveVisionHandoffIntent(basePrompt);
 	const contractPrompt = buildStructuredVisionContractPrompt(basePrompt, attempt, maxAttempts, {
@@ -256,7 +259,8 @@ async function requestStructuredProxyOutput(
 		...imageParts,
 		new vscode.LanguageModelTextPart(contractPrompt)
 	]);
-	return runWithSuppressedVisionOrchestration(async () => {
+	const modelLabel = proxyModel.name ?? proxyModel.id ?? "proxy";
+	const runOnce = async (): Promise<string> => runWithSuppressedVisionOrchestration(async () => {
 		const response = await proxyModel.sendRequest([visionMessage], {}, token);
 		let description = "";
 		for await (const chunk of response.stream) {
@@ -266,6 +270,10 @@ async function requestStructuredProxyOutput(
 		}
 		return description;
 	});
+	if (!logger) {
+		return runOnce();
+	}
+	return executeStructuredVisionLmWithRetry(runOnce, settings, logger, { route: "proxy", modelLabel });
 }
 
 async function requestStructuredNativeOutput(

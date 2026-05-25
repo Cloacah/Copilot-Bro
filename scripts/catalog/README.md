@@ -35,8 +35,28 @@ npm run catalog:qwen
 
 Uses `resources/qwen-bailian-model-catalog.json`. Optional live scrape: `node scripts/catalog/scrape-bailian-model-market.mjs` (Playwright + login).
 
+## Kimi (Moonshot)
+
+```bash
+npm run catalog:kimi
+```
+
+Reads `resources/kimi-model-cards.json` (curated from [platform models](https://platform.moonshot.ai/docs/models)) and writes:
+
+- `resources/kimi-moonshot-model-catalog.json`
+- `src/config/kimiModelFamilies.ts`
+
 ## Verify committed artifacts
 
 ```bash
 npm run catalog:verify
+```
+
+## Dev / scrape helpers
+
+```bash
+npm run catalog:bailian:scrape
+npm run dev:recover-vision-proxy
+npm run dev:rebuild-vision-proxy-from-vsix
+npm run dev:recover-vision-proxy-from-transcript
 ```

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createHttpError } from "../errors";
 import {
 	extractBusinessCodeFromMessage,
+	extractErrorTypeFromMessage,
 	inferHttpRetryable,
 	isFatalProviderFailure,
 	isTransientProviderFailure,
@@ -54,6 +55,13 @@ test("generic request failed without rate-limit signals is not transient", () =>
 test("isFatalProviderFailure rejects Zhipu 1304 and 1310", () => {
 	assert.equal(isFatalProviderFailure(createHttpError(403, "Forbidden", "{\"error\":{\"code\":\"1304\"}}", "")), true);
 	assert.equal(isFatalProviderFailure(createHttpError(403, "Forbidden", "{\"error\":{\"code\":\"1310\"}}", "")), true);
+});
+
+test("isTransientProviderFailure recognizes Moonshot engine_overloaded type", () => {
+	const body = "{\"error\":{\"type\":\"engine_overloaded\",\"message\":\"Engine is overloaded\"}}";
+	assert.deepEqual(parseProviderErrorBody(body), { errorType: "engine_overloaded" });
+	assert.equal(extractErrorTypeFromMessage(body), "engine_overloaded");
+	assert.equal(isTransientProviderFailure(createHttpError(503, "Service Unavailable", body, "")), true);
 });
 
 test("shouldAdvanceHostUiModelCandidate advances on transient and model-missing errors", () => {

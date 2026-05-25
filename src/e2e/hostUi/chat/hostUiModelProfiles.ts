@@ -38,6 +38,11 @@ export const HOST_UI_MODEL_PROFILE_REGISTRY = {
 
 export type HostUiModelProfileId = keyof typeof HOST_UI_MODEL_PROFILE_REGISTRY;
 
+/** Scenario id → profile when kind/provider inference would pick the wrong chain. */
+const HOST_UI_SCENARIO_PROFILE_BY_ID: Partial<Record<string, HostUiModelProfileId>> = {
+	"tool-call-model-chat": "zhipu.text.tool"
+};
+
 export const HOST_UI_DEFAULT_TEXT_PROFILE: HostUiModelProfileId = "deepseek.text";
 
 /** Default text profile per provider for participant probes and runtime id resolution. */
@@ -115,6 +120,10 @@ export interface HostUiModelSelectionInput {
 }
 
 function inferProfileId(input: HostUiModelSelectionInput): HostUiModelProfileId | undefined {
+	const scenarioId = input.id?.trim();
+	if (scenarioId && scenarioId in HOST_UI_SCENARIO_PROFILE_BY_ID) {
+		return HOST_UI_SCENARIO_PROFILE_BY_ID[scenarioId];
+	}
 	const provider = input.requiredApiKeyProvider?.trim().toLowerCase();
 	if (input.kind === "native-vision" && provider === "zhipu") {
 		return "zhipu.vision-native";
@@ -194,6 +203,7 @@ export function resolveIntegrationTurnCandidates(
 	}
 	const turnLike = turn ?? {};
 	const merged: HostUiModelSelectionInput = {
+		id: scenario.id,
 		modelProfile: turnLike.modelProfile ?? scenario.modelProfile,
 		runtimeModelId: turnLike.runtimeModelId ?? scenario.runtimeModelId,
 		runtimeModelCandidates: turnLike.runtimeModelCandidates ?? scenario.runtimeModelCandidates,
@@ -207,6 +217,7 @@ export function resolveIntegrationTurnCandidates(
 	}
 	return resolveHostUiRuntimeModelCandidates(
 		{
+			id: scenario.id,
 			...scenario,
 			kind: scenario.kind,
 			requiredApiKeyProvider: scenario.requiredApiKeyProvider,

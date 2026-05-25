@@ -25,12 +25,23 @@ export const ZHIPU_FATAL_BUSINESS_CODES = new Set([
 	"1310" // apikey account frozen
 ]);
 
+/** OpenAI-compatible `error.type` values (Moonshot, DeepSeek, etc.). */
+export const OPENAI_COMPAT_TRANSIENT_ERROR_TYPES = new Set([
+	"engine_overloaded",
+	"rate_limit_exceeded",
+	"server_error",
+	"overloaded",
+	"slow_down"
+]);
+
 const TRANSIENT_MESSAGE_PATTERNS = [
 	/too many requests/i,
 	/访问量过大/,
 	/请您稍后再试/,
 	/please try again/i,
-	/rate limit/i
+	/rate limit/i,
+	/engine_overloaded/i,
+	/rate_limit_exceeded/i
 ];
 
 function matchesTransientMessagePattern(text: string): boolean {
@@ -45,22 +56,47 @@ function matchesTransientMessagePattern(text: string): boolean {
 	return false;
 }
 
-export function parseProviderErrorBody(body: string): { businessCode?: string } {
+export function parseProviderErrorBody(body: string): { businessCode?: string; errorType?: string } {
 	const trimmed = body?.trim();
 	if (!trimmed) {
 		return {};
 	}
 	try {
-		const json = JSON.parse(trimmed) as { error?: { code?: unknown }; code?: unknown };
+		const json = JSON.parse(trimmed) as {
+			error?: { code?: unknown; type?: unknown };
+			code?: unknown;
+			type?: unknown;
+		};
 		const raw = json.error?.code ?? json.code;
+		const typeRaw = json.error?.type ?? json.type;
+		const out: { businessCode?: string; errorType?: string } = {};
 		if (raw !== undefined && raw !== null) {
-			return { businessCode: String(raw) };
+			out.businessCode = String(raw);
+		}
+		if (typeRaw !== undefined && typeRaw !== null) {
+			out.errorType = String(typeRaw);
+		}
+		if (out.businessCode || out.errorType) {
+			return out;
 		}
 	} catch {
 		// fall through — body may be embedded in a longer message
 	}
-	const match = trimmed.match(/"code"\s*:\s*"?(\d+)"?/u);
-	return match ? { businessCode: match[1] } : {};
+	const codeMatch = trimmed.match(/"code"\s*:\s*"?(\d+)"?/u);
+	const typeMatch = trimmed.match(/"type"\s*:\s*"([^"]+)"/u);
+	return {
+		...(codeMatch ? { businessCode: codeMatch[1] } : {}),
+		...(typeMatch ? { errorType: typeMatch[1] } : {})
+	};
+}
+
+export function extractErrorTypeFromMessage(message: string): string | undefined {
+	const parsed = parseProviderErrorBody(message);
+	if (parsed.errorType) {
+		return parsed.errorType;
+	}
+	const inline = message.match(/"type"\s*:\s*"([^"]+)"/u);
+	return inline?.[1];
 }
 
 export function extractBusinessCodeFromMessage(message: string): string | undefined {
@@ -86,9 +122,14 @@ export function inferHttpRetryable(status: number, businessCode?: string): boole
 
 export function isTransientProviderFailure(error: unknown): boolean {
 	const normalized = normalizeUnknownError(error);
-	const businessCode = normalized.code ?? extractBusinessCodeFromMessage(`${normalized.message}\n${normalized.body ?? ""}`);
+	const text = `${normalized.message}\n${normalized.body ?? ""}`;
+	const businessCode = normalized.code ?? extractBusinessCodeFromMessage(text);
+	const errorType = extractErrorTypeFromMessage(text);
 	if (businessCode && ZHIPU_FATAL_BUSINESS_CODES.has(businessCode)) {
 		return false;
+	}
+	if (errorType && OPENAI_COMPAT_TRANSIENT_ERROR_TYPES.has(errorType)) {
+		return true;
 	}
 	if (businessCode && ZHIPU_TRANSIENT_BUSINESS_CODES.has(businessCode)) {
 		return true;
@@ -96,7 +137,6 @@ export function isTransientProviderFailure(error: unknown): boolean {
 	if (normalized.retryable) {
 		return true;
 	}
-	const text = `${normalized.message}\n${normalized.body ?? ""}`;
 	if (matchesTransientMessagePattern(text)) {
 		return true;
 	}

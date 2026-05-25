@@ -21,10 +21,13 @@ auditScope:
 | D 识图重试 | ✅ | `retry.enabled` 关闭格式环与结构化 HTTP 重试 |
 | E 单测/CI | ✅ | `catalog:verify`（离线）、`verify:ci`、`secretsStorage` / `visionStructuredRetryPolicy` / `providerErrorSurface` |
 | F Release 剔 e2e | ✅ | VSIX 拒 `out/e2e/**`；`extensionSmokeActivation` 动态加载；`smokeModeGate` |
+| G P2 收尾 | ✅ | Proxy LM HTTP 重试；Moonshot transient type；Kimi catalog；dev npm 脚本；scenario id profile |
 
-**R-P0-01～03**：已修复。**R-P1-01～06、09**：已修复。**R-P1-07**：UI + checklist 澄清 `retryOnFailure` 仅 agentSession 批次。**R-P1-08**：已缓解。**R-P2-01**：已修复（无静态 e2e require；test VSIX 仍含 `out/e2e/**`）。**R-P2-02**：已缓解（`providerErrorSurface` / `providerOrchestration` / `validateModelConfig` 经 settings 单测；`ExtendedModelsProvider` 仍依赖 VS Code 实机）。**R-P2-05～07、09～12**：已修复。**R-P2-03/04/06/08**：保留为设计权衡（Proxy HTTP 对称、Kimi catalog 生成器、未挂 npm 的 dev 脚本）。
+**R-P0-01～03**：已修复。**R-P1-01～06、09**：已修复。**R-P1-07**：UI + checklist 澄清 `retryOnFailure` 仅 agentSession 批次。**R-P1-08**：已缓解。**R-P2-01**：已修复（无静态 e2e require；test VSIX 仍含 `out/e2e/**`）。**R-P2-02**：已缓解（`providerErrorSurface` / `providerOrchestration` / `validateModelConfig` 经 settings 单测；`ExtendedModelsProvider` 仍依赖 VS Code 实机）。**R-P2-03～12**：已修复或已缓解（见下）。
 
-**2026-05-26**：Host UI stream 阶段 429/1305 重试 + `zhipu.vision-native` 付费回退；`verify-release-vsix` 与动态 smoke 对齐；catalog README + `glm-4.6v-flashx`；实机 acceptance **passed**。
+**2026-05-26（早）**：Host UI stream 阶段 429/1305 重试 + `zhipu.vision-native` 付费回退；`verify-release-vsix` 与动态 smoke 对齐；catalog README + `glm-4.6v-flashx`；实机 acceptance **passed**。
+
+**2026-05-26（晚）**：**R-P2-03** proxy 结构化识图 `sendRequest`+stream 外包 `executeStructuredVisionLmWithRetry`；**R-P2-04** Moonshot/OpenAI `error.type`（`engine_overloaded` 等）；**R-P2-06** `catalog:kimi` + `kimi-model-cards.json`；**R-P2-08** `dev:recover-vision-proxy*`、`catalog:bailian:scrape` 挂 npm；**R-P2-10** `HOST_UI_SCENARIO_PROFILE_BY_ID` + integration `id` 透传。
 
 ## 0. 审计方法与记忆汇总规则
 

@@ -10,8 +10,10 @@ const root = resolveRepoRoot(import.meta.url);
 const tracked = [
 	"resources/qwen-bailian-model-catalog.json",
 	"resources/zhipu-bigmodel-model-catalog.json",
+	"resources/kimi-moonshot-model-catalog.json",
 	"src/config/qwenModelFamilies.ts",
-	"src/config/zhipuModelFamilies.ts"
+	"src/config/zhipuModelFamilies.ts",
+	"src/config/kimiModelFamilies.ts"
 ];
 
 process.chdir(root);
