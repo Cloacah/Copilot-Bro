@@ -21,7 +21,10 @@ export default tseslint.config(
 				process: "readonly"
 			},
 			parserOptions: {
-				project: "./tsconfig.json"
+				project: [
+					"./tsconfig.extension.json",
+					"./tsconfig.test.json"
+				]
 			}
 		},
 		rules: {

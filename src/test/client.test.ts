@@ -45,7 +45,8 @@ test("sendChatCompletion treats timeout as stream idle timeout, not total reques
 
 	assert.deepEqual(events, [
 		{ type: "text", text: "a" },
-		{ type: "text", text: "b" }
+		{ type: "text", text: "b" },
+		{ type: "finish", reason: "stop" }
 	]);
 });
 

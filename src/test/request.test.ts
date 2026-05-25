@@ -40,10 +40,11 @@ test("buildRequestBody includes model options and extra body", () => {
 });
 
 test("buildHeaders merges custom headers", () => {
-	const headers = buildHeaders("secret", model);
+	const headers = buildHeaders("secret", model, { "X-Extended-Models-Request-Id": "req-1" });
 
 	assert.equal(headers.Authorization, "Bearer secret");
 	assert.equal(headers["X-Test"], "1");
+	assert.equal(headers["X-Extended-Models-Request-Id"], "req-1");
 	assert.equal(headers.Accept, "text/event-stream");
 });
 
@@ -66,6 +67,28 @@ test("Kimi thinking requests keep all reasoning for replay", () => {
 	);
 
 	assert.deepEqual(body.thinking, { type: "enabled", keep: "all" });
+});
+
+test("Moonshot v1 omits thinking.keep when thinking is enabled", () => {
+	const body = buildRequestBody(
+		{ ...model, provider: "kimi", id: "moonshot-v1-8k", baseUrl: "https://api.moonshot.cn/v1" },
+		[{ role: "user", content: "hello" }],
+		{} as unknown as ProvideLanguageModelChatResponseOptions
+	);
+
+	assert.deepEqual(body.thinking, { type: "enabled" });
+});
+
+test("Moonshot v1 and non-Kimi models omit thinking.keep", () => {
+	const moonshot = buildRequestBody(
+		{ ...model, provider: "kimi", id: "moonshot-v1-8k", baseUrl: "https://api.moonshot.ai/v1" },
+		[{ role: "user", content: "hello" }],
+		{} as unknown as ProvideLanguageModelChatResponseOptions
+	);
+	assert.deepEqual(moonshot.thinking, { type: "enabled" });
+
+	const deepseek = buildRequestBody(model, [{ role: "user", content: "hello" }], {} as unknown as ProvideLanguageModelChatResponseOptions);
+	assert.deepEqual(deepseek.thinking, { type: "enabled" });
 });
 
 test("Qwen presets do not send unsupported generic thinking object", () => {

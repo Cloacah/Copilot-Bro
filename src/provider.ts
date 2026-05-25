@@ -2,29 +2,59 @@ import * as vscode from "vscode";
 import type {
 	CancellationToken,
 	LanguageModelChatInformation,
+	LanguageModelChatRequestOptions,
 	LanguageModelChatProvider,
 	LanguageModelChatRequestMessage,
 	LanguageModelResponsePart,
 	Progress,
 	ProvideLanguageModelChatResponseOptions
 } from "vscode";
-import { findModelConfig, getRuntimeModelId, getSettings, validateModelConfig } from "./config/settings";
+import { findModelConfig, getRuntimeModelId, getSettings, isWrappedLanguageModelConfig, validateModelConfig } from "./config/settings";
+import { writeScopedModelEntry } from "./config/configScope";
+import { isolateFailedBatch } from "./agentSession/batchPlanner";
+import { failBatch } from "./agentSession/sessionManager";
 import { ProviderError, normalizeUnknownError } from "./errors";
 import { Logger } from "./logger";
+import { getDeclaredImageInputCapability } from "./modelCapabilities";
+import { buildAttributionHeaders, buildModelCapabilities, collectImageRefs, createRequestTrace, formatVisionStatus } from "./providerOrchestration";
 import { ensureApiKey } from "./secrets";
-import type { ChatCompletionUsage, ModelConfig, OpenAIMessage, OpenAIToolCall, StreamEvent } from "./types";
+import type { ChatCompletionUsage, ExtensionSettings, ModelConfig, OpenAIMessage, OpenAIToolCall, StreamEvent } from "./types";
 import { convertMessages, encodeReasoningMarker, estimateOpenAIMessageTokens, estimateTokens, normalizeToolCallId, repairReasoningToolHistory } from "./openaiCompat/messages";
+import { applyLongTermMemoryBudget } from "./memory/memoryTokenBudget";
+import { logPromptBudgetPressure } from "./tokenBudget";
 import { buildHeaders, buildRequestBody } from "./openaiCompat/request";
 import { sendChatCompletion } from "./openaiCompat/client";
 import { fingerprintAssistantTurn, readReasoningCache, ReasoningCache, writeReasoningCache } from "./reasoningCache";
 import { prependSelectedPromptPreset } from "./promptPresets";
-import { resolveVisionProxyMessages } from "./visionProxy";
+import { needsVision } from "./toolCooperation/needVisionDetector";
+import { needsVisionFromRequestMessages } from "./visionProtocol/visionMessageScan";
+import { HostUiSmokeLogEvent } from "./visionProtocol/hostUiSmokeLogEvents";
+import { createVisionDetailsText } from "./toolCooperation/outputSemantics";
+import { createVisionProgressReporter } from "./toolCooperation/visionProgressReporter";
+import type { ToolSelection } from "./toolCooperation/toolSelector";
+import { prependVisionPromptContract, buildVisionPromptContract } from "./toolCooperation/visionPromptContract";
+import { getImageAnalyzeAdapter } from "./toolCooperation/adapters/registry";
+import {
+	appendNativeVisionPostCompletionProgress,
+	applyVisionResidualImageGuard,
+	reportVisionRouteChatDebug,
+	runVisionPreRoute,
+	runVisionStrategyBranch,
+	type VisionRouteReporter
+} from "./providerVisionBranch";
+import { buildWrappedLanguageModelRequest, getCachedWrappedLanguageModelConfigs, resolveWrappedLanguageModel } from "./vscodeLmWrapper";
+import { isVisionProxyEnabledForModel } from "./visionProxy";
+import { isVisionOrchestrationSuppressed } from "./visionOrchestrationContext";
+import {
+	buildThinkingOnlyFallbackText,
+	hasSubstantiveChatResponse,
+	usageIndicatesLengthStop,
+	type ChatResponseReplaySnapshot
+} from "./responseCompletion";
 
 type ResponseProgress = Progress<LanguageModelResponsePart>;
 
-interface ResponseReplayState {
-	reasoningParts: string[];
-	textParts: string[];
+interface ResponseReplayState extends ChatResponseReplaySnapshot {
 	toolCallIds: string[];
 	toolCalls: OpenAIToolCall[];
 	displayedThinkingLength: number;
@@ -80,8 +110,9 @@ export class ExtendedModelsProvider implements LanguageModelChatProvider {
 	): Promise<LanguageModelChatInformation[]> {
 		const settings = this.getSettingsForProvider();
 		this.logger.setLevel(settings.logLevel);
+		const models = listRuntimeModels(settings.models);
 
-		return settings.models.map((model) => toLanguageModelInfo(model));
+		return models.map((model) => toLanguageModelInfo(model, settings));
 	}
 
 	async provideTokenCount(
@@ -101,8 +132,9 @@ export class ExtendedModelsProvider implements LanguageModelChatProvider {
 	): Promise<void> {
 		const settings = this.getSettingsForProvider();
 		this.logger.setLevel(settings.logLevel);
+		const runtimeModels = listRuntimeModels(settings.models);
 
-		const configuredModel = findModelConfig(modelInfo.id, settings.models);
+		const configuredModel = findModelConfig(modelInfo.id, runtimeModels);
 		if (!configuredModel) {
 			throw new ProviderError(`Model configuration not found: ${modelInfo.id}`, { code: "CONFIG", retryable: false });
 		}
@@ -114,8 +146,17 @@ export class ExtendedModelsProvider implements LanguageModelChatProvider {
 			throw new ProviderError(validationError, { code: "CONFIG", retryable: false });
 		}
 
-		const apiKey = await ensureApiKey(this.secrets, model);
-		if (!apiKey) {
+		const wrappedTarget = isWrappedLanguageModelConfig(model)
+			? await resolveWrappedLanguageModel(model, this.logger)
+			: undefined;
+		if (isWrappedLanguageModelConfig(model) && !wrappedTarget) {
+			throw new ProviderError(`Wrapped VS Code model is unavailable: ${model.wrappedLanguageModelId}.`, { code: "CONFIG", retryable: false });
+		}
+
+		const apiKey = isWrappedLanguageModelConfig(model)
+			? undefined
+			: await ensureApiKey(this.secrets, model);
+		if (!wrappedTarget && !apiKey) {
 			throw new ProviderError(`Missing API key for provider ${model.provider}.`, { code: "AUTH", retryable: false });
 		}
 
@@ -123,18 +164,187 @@ export class ExtendedModelsProvider implements LanguageModelChatProvider {
 			user: vscode.LanguageModelChatMessageRole.User,
 			assistant: vscode.LanguageModelChatMessageRole.Assistant
 		};
-		const resolvedMessages = await resolveVisionProxyMessages(messages, model, settings, this.logger, token);
+		let trace = createRequestTrace(settings.requestAttribution);
+		const detectionMessages = convertMessages(messages, { ...model, vision: true }, roleIds);
+		const modelCapabilities = buildModelCapabilities(model, settings);
+		const visionNeeded = !isVisionOrchestrationSuppressed()
+			&& (needsVisionFromRequestMessages(messages, modelCapabilities, settings.visionProcessing)
+				|| needsVision(detectionMessages, modelCapabilities, settings.visionProcessing));
+		let strategySelection: ToolSelection | undefined;
+		let resolvedMessages = messages;
+		let visionStatusStarted = false;
+		let plannedBatchCount = 0;
+		let activeBatchId: string | undefined;
+		let nativeVisionImageHashes: string[] = [];
+		const analyzer = getImageAnalyzeAdapter();
+		const visionProgressReporter = createVisionProgressReporter();
+		const chatDebugVisible = settings.visionProcessing.chatDebugVisibility;
+		const visionReporter: VisionRouteReporter = {
+			appendProgress: (text) => {
+				visionProgressReporter.append(text);
+			},
+			flushProgress: () => {
+				const meta = visionProgressReporter.flush(progress, chatDebugVisible);
+				if (meta && process.env.COPILOT_BRO_UI_SMOKE === "1") {
+					this.logger.info(HostUiSmokeLogEvent.visionProgressFlush, meta);
+				}
+			},
+			reportChatDebug: (text) => {
+				reportVisionRouteChatDebug(progress, text, chatDebugVisible);
+			}
+		};
+
+		if (visionNeeded) {
+			const preRoute = await runVisionPreRoute({
+				messages: resolvedMessages,
+				detectionMessages,
+				model,
+				settings,
+				logger: this.logger,
+				analyzer,
+				reporter: visionReporter
+			});
+			resolvedMessages = preRoute.messages;
+			if (preRoute.shouldStop) {
+				return;
+			}
+
+			const branch = await runVisionStrategyBranch({
+				messages,
+				detectionMessages,
+				resolvedMessages,
+				model,
+				settings,
+				logger: this.logger,
+				token,
+				modelCapabilities,
+				apiKey,
+				wrappedTarget,
+				trace,
+				analyzer,
+				reporter: visionReporter
+			});
+			resolvedMessages = branch.messages;
+			trace = branch.trace;
+			strategySelection = branch.strategySelection;
+			visionStatusStarted = branch.visionStatusStarted;
+			plannedBatchCount = branch.plannedBatchCount;
+			activeBatchId = branch.activeBatchId;
+			nativeVisionImageHashes = branch.nativeVisionImageHashes;
+			if (branch.shouldStop) {
+				return;
+			}
+		} else {
+			resolvedMessages = messages;
+		}
+
+		resolvedMessages = applyVisionResidualImageGuard(
+			resolvedMessages,
+			model,
+			this.logger,
+			strategySelection?.strategy ?? "unknown",
+			trace,
+			visionReporter
+		);
+
+		if (wrappedTarget) {
+			const wrappedVisionContract = visionNeeded
+				? buildVisionPromptContract(settings.visionProcessing.spatialSchemaVersion)
+				: undefined;
+			const wrappedRequest = await buildWrappedLanguageModelRequest(this.context, settings, resolvedMessages, wrappedVisionContract);
+			const replayState: ResponseReplayState = {
+				reasoningParts: [],
+				textParts: [],
+				toolCallIds: [],
+				toolCalls: [],
+				displayedThinkingLength: 0
+			};
+
+			this.updateStatusBar(model, wrappedRequest.estimatedPromptTokens);
+			this.logger.info("request.start", {
+				model: model.id,
+				runtimeModelId: getRuntimeModelId(model),
+				displayName: model.displayName ?? model.id,
+				configId: model.configId,
+				provider: model.provider,
+				wrappedLanguageModelId: model.wrappedLanguageModelId,
+				transport: "vscode-lm-wrapper",
+				messageCount: wrappedRequest.messages.length,
+				...trace,
+				visionNeeded,
+				plannedBatchCount,
+				strategy: strategySelection?.strategy ?? "native"
+			});
+
+			try {
+				await forwardWrappedLanguageModelRequest(wrappedTarget, wrappedRequest.messages, options, progress, token, replayState);
+				ensureSubstantiveChatResponse(progress, replayState);
+				this.updateStatusBar(model, wrappedRequest.estimatedPromptTokens, replayState);
+				this.logger.info("request.end", {
+					model: model.id,
+					runtimeModelId: getRuntimeModelId(model),
+					displayName: model.displayName ?? model.id,
+					configId: model.configId,
+					provider: model.provider,
+					wrappedLanguageModelId: model.wrappedLanguageModelId,
+					transport: "vscode-lm-wrapper",
+					...trace
+				});
+				return;
+			} catch (error) {
+				const normalized = normalizeUnknownError(error);
+				if (activeBatchId) {
+					failBatch(activeBatchId);
+					isolateFailedBatch(activeBatchId, normalized);
+				}
+				if (visionStatusStarted && strategySelection) {
+					reportVisionProgress(progress, formatVisionStatus("failed", strategySelection, trace, settings.requestAttribution), settings.visionProcessing.chatDebugVisibility);
+				}
+				this.logger.error("request.failed", {
+					model: model.id,
+					runtimeModelId: getRuntimeModelId(model),
+					displayName: model.displayName ?? model.id,
+					configId: model.configId,
+					provider: model.provider,
+					wrappedLanguageModelId: model.wrappedLanguageModelId,
+					transport: "vscode-lm-wrapper",
+					...trace,
+					status: normalized.status,
+					code: normalized.code,
+					message: normalized.message,
+					url: normalized.url,
+					body: normalized.body
+				});
+				throw normalized;
+			}
+		}
+
 		let openAiMessages = convertMessages(resolvedMessages, model, roleIds);
-		openAiMessages = await prependSelectedPromptPreset(this.context, settings, openAiMessages);
+		openAiMessages = prependVisionPromptContract(openAiMessages, settings.visionProcessing, visionNeeded);
+		openAiMessages = await prependSelectedPromptPreset(this.context, settings, openAiMessages, { logger: this.logger });
 		openAiMessages = repairReasoningToolHistory(openAiMessages, model, {
 			getReasoning: (callId) => this.reasoningByToolCallId.get(callId),
 			getAssistantMessage: (callId) => this.assistantMessageByToolCallId.get(callId),
 			getReasoningForAssistant: (message) => this.reasoningCache.get(fingerprintAssistantTurn(message))
 		});
+		const workspaceMemoryId = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "global";
+		const memoryBudget = applyLongTermMemoryBudget(openAiMessages, model, workspaceMemoryId, 0);
+		openAiMessages = memoryBudget.messages;
+		if (memoryBudget.selection.retained.length > 0) {
+			this.logger.info("memory.budget.applied", {
+				model: model.id,
+				workspaceId: workspaceMemoryId,
+				retainedCount: memoryBudget.selection.retained.length,
+				droppedCount: memoryBudget.selection.dropped.length,
+				memoryBudgetCeiling: memoryBudget.selection.memoryTokenBudget,
+				retainedUnits: memoryBudget.selection.totalRetainedTokens
+			});
+		}
 		const toolChoice = getToolChoice(options);
 		const body = buildRequestBody(model, openAiMessages, options, toolChoice);
-		const headers = buildHeaders(apiKey, model);
+		const headers = buildHeaders(apiKey ?? "", model, buildAttributionHeaders(settings.requestAttribution, trace));
 		const estimatedPromptTokens = estimateOpenAIMessageTokens(openAiMessages);
+		logPromptBudgetPressure(this.logger, model, estimatedPromptTokens);
 		this.updateStatusBar(model, estimatedPromptTokens);
 		const replayState: ResponseReplayState = {
 			reasoningParts: [],
@@ -146,18 +356,31 @@ export class ExtendedModelsProvider implements LanguageModelChatProvider {
 
 		this.logger.info("request.start", {
 			model: model.id,
+			runtimeModelId: getRuntimeModelId(model),
+			displayName: model.displayName ?? model.id,
+			configId: model.configId,
 			provider: model.provider,
 			baseUrl: model.baseUrl,
-			messageCount: messages.length
+			messageCount: messages.length,
+			...trace,
+			visionNeeded,
+			plannedBatchCount,
+			strategy: strategySelection?.strategy ?? "legacy-proxy"
+		});
+		this.logger.info("request.messages.summary", {
+			model: model.id,
+			...trace,
+			summary: summarizeOpenAIMessages(body.messages)
 		});
 		this.logger.debug("request.body", {
+			...trace,
 			...body,
 			messages: `[${body.messages.length} messages]`
 		});
 
 		try {
 			await sendChatCompletion({
-				apiKey,
+				apiKey: apiKey ?? "",
 				model,
 				body,
 				headers,
@@ -171,6 +394,7 @@ export class ExtendedModelsProvider implements LanguageModelChatProvider {
 				onRetry: (attempt, delayMs, error) => {
 					this.logger.warn("request.retry", {
 						model: model.id,
+							...trace,
 						attempt,
 						delayMs,
 						status: error.status,
@@ -180,14 +404,43 @@ export class ExtendedModelsProvider implements LanguageModelChatProvider {
 				}
 			});
 			flushThinkingDisplay(progress, replayState, true);
+			ensureSubstantiveChatResponse(progress, replayState);
 			await this.rememberReasoning(replayState);
+			await appendNativeVisionPostCompletionProgress({
+				strategySelection,
+				visionStatusStarted,
+				nativeVisionImageHashes,
+				assistantText: replayState.textParts.join(""),
+				model,
+				trace,
+				settings,
+				logger: this.logger,
+				reporter: visionReporter
+			});
 			this.updateStatusBar(model, estimatedPromptTokens, replayState);
-			this.logger.info("request.end", { model: model.id });
+			this.logger.info("request.end", {
+				model: model.id,
+				runtimeModelId: getRuntimeModelId(model),
+				displayName: model.displayName ?? model.id,
+				configId: model.configId,
+				...trace
+			});
 		} catch (error) {
 			const normalized = normalizeUnknownError(error);
+			if (activeBatchId) {
+				failBatch(activeBatchId);
+				isolateFailedBatch(activeBatchId, normalized);
+			}
+			if (visionStatusStarted && strategySelection) {
+				reportVisionProgress(progress, formatVisionStatus("failed", strategySelection, trace, settings.requestAttribution), settings.visionProcessing.chatDebugVisibility);
+			}
 			this.logger.error("request.failed", {
 				model: model.id,
+				runtimeModelId: getRuntimeModelId(model),
+				displayName: model.displayName ?? model.id,
+				configId: model.configId,
 				provider: model.provider,
+				...trace,
 				status: normalized.status,
 				code: normalized.code,
 				message: normalized.message,
@@ -197,7 +450,6 @@ export class ExtendedModelsProvider implements LanguageModelChatProvider {
 			throw normalized;
 		}
 	}
-
 	private async rememberReasoning(state: ResponseReplayState): Promise<void> {
 		const reasoning = state.reasoningParts.join("").trim();
 		if (!reasoning) {
@@ -244,17 +496,16 @@ export class ExtendedModelsProvider implements LanguageModelChatProvider {
 	}
 }
 
-function toLanguageModelInfo(model: ModelConfig): LanguageModelChatInformation {
+function toLanguageModelInfo(model: ModelConfig, settings?: ExtensionSettings): LanguageModelChatInformation {
 	const maxOutput = getEffectiveMaxOutputTokens(model);
 	const maxInput = getEffectiveMaxInputTokens(model);
 	const detailParts = [
 		model.providerDisplayName ?? model.provider,
-		model.category,
-		model.thinking?.type === "enabled" ? "thinking" : undefined,
-		model.vision ? "vision" : undefined,
-		model.toolCalling ? "tools" : undefined
+		isWrappedLanguageModelConfig(model) ? "wrapped" : undefined,
+		model.vision ? "vision" : undefined
 	].filter(Boolean);
 
+	const canUseVisionProxy = supportsVisionProxy(model, settings);
 	const info: ModelPickerChatInformation = {
 		id: getRuntimeModelId(model),
 		name: model.displayName || model.id,
@@ -262,32 +513,125 @@ function toLanguageModelInfo(model: ModelConfig): LanguageModelChatInformation {
 		version: "1.0.0",
 		maxInputTokens: maxInput,
 		maxOutputTokens: maxOutput,
-		tooltip: createModelTooltip(model, maxInput, maxOutput),
+		tooltip: createModelTooltip(model, maxInput, maxOutput, settings),
 		detail: detailParts.join(" · "),
 		isUserSelectable: true,
 		configurationSchema: createModelConfigurationSchema(model),
 		capabilities: {
-			imageInput: model.vision || Boolean(model.visionProxyModelId),
+			imageInput: getDeclaredImageInputCapability(model, { proxyAvailable: canUseVisionProxy }),
 			toolCalling: model.toolCalling
 		}
 	};
 	return info;
 }
 
-function createModelTooltip(model: ModelConfig, maxInput: number, maxOutput: number): string {
+function supportsVisionProxy(model: ModelConfig, settings?: ExtensionSettings): boolean {
+	if (!settings) {
+		return model.vision ? Boolean(model.visionProxyModelId?.trim()) : model.visionProxyModelId !== null;
+	}
+	return isVisionProxyEnabledForModel(model, settings);
+}
+
+function describeVisionMode(model: ModelConfig, settings?: ExtensionSettings): string {
+	if (model.vision) {
+		return supportsVisionProxy(model, settings) ? "native + proxy" : "native";
+	}
+	if (typeof model.visionProxyModelId === "string" && model.visionProxyModelId.trim()) {
+		return "proxy (model)";
+	}
+	if (model.visionProxyModelId === null) {
+		return "no";
+	}
+	return settings?.visionProxy.enabled ? "proxy (global)" : "no";
+}
+
+function summarizeOpenAIMessages(messages: readonly OpenAIMessage[]): Record<string, unknown> {
+	const roleCounts: Record<string, number> = {
+		system: 0,
+		user: 0,
+		assistant: 0,
+		tool: 0
+	};
+
+	let stringContentMessages = 0;
+	let arrayContentMessages = 0;
+	let nullOrEmptyContentMessages = 0;
+	let textPartCount = 0;
+	let imagePartCount = 0;
+	let toolCallCount = 0;
+	let toolResultCount = 0;
+	let reasoningMessageCount = 0;
+
+	for (const message of messages) {
+		roleCounts[message.role] = (roleCounts[message.role] ?? 0) + 1;
+
+		if (typeof message.content === "string") {
+			stringContentMessages += 1;
+			if (!message.content.trim()) {
+				nullOrEmptyContentMessages += 1;
+			}
+		} else if (Array.isArray(message.content)) {
+			arrayContentMessages += 1;
+			if (message.content.length === 0) {
+				nullOrEmptyContentMessages += 1;
+			}
+			for (const part of message.content) {
+				if (part.type === "text") {
+					textPartCount += 1;
+				} else if (part.type === "image_url") {
+					imagePartCount += 1;
+				}
+			}
+		} else {
+			nullOrEmptyContentMessages += 1;
+		}
+
+		if (message.tool_calls?.length) {
+			toolCallCount += message.tool_calls.length;
+		}
+		if (message.tool_call_id) {
+			toolResultCount += 1;
+		}
+		if (message.reasoning_content?.trim()) {
+			reasoningMessageCount += 1;
+		}
+	}
+
+	return {
+		totalMessages: messages.length,
+		roleCounts,
+		stringContentMessages,
+		arrayContentMessages,
+		nullOrEmptyContentMessages,
+		textPartCount,
+		imagePartCount,
+		hasImageParts: imagePartCount > 0,
+		toolCallCount,
+		toolResultCount,
+		reasoningMessageCount
+	};
+}
+
+function createModelTooltip(model: ModelConfig, maxInput: number, maxOutput: number, settings?: ExtensionSettings): string {
 	const hints = model.parameterHints ?? {};
+	const connectionLine = isWrappedLanguageModelConfig(model)
+		? `Wrapped target: ${(model.wrappedLanguageModelVendor ?? model.provider)} / ${model.wrappedLanguageModelId}`
+		: `Base URL: ${model.baseUrl ?? "default"}`;
 	return [
 		`${model.displayName ?? model.id} (${model.id})`,
 		`Provider: ${model.providerDisplayName ?? model.provider}`,
-		`Base URL: ${model.baseUrl ?? "default"}`,
+		connectionLine,
 		`Context: ${formatCompactTokens(maxInput)} input + ${formatCompactTokens(maxOutput)} output`,
-		`Vision: ${model.vision ? "native" : model.visionProxyModelId ? "proxy" : "no"}; Tools: ${model.toolCalling ? "yes" : "no"}; Thinking: ${model.thinking?.type ?? "not set"}`,
+		`Vision: ${describeVisionMode(model, settings)}; Tools: ${model.toolCalling ? "yes" : "no"}; Thinking: ${model.thinking?.type ?? "not set"}`,
 		`Temperature: ${model.temperature ?? hints.temperature?.recommended ?? "not set"}`,
 		"Use Copilot Bro: Open Model Settings for the full editor. Newer Copilot hosts may also show quick controls here."
 	].join("\n");
 }
 
 function createModelConfigurationSchema(model: ModelConfig): unknown {
+	if (isWrappedLanguageModelConfig(model)) {
+		return undefined;
+	}
 	const properties: Record<string, unknown> = {};
 	const hints = model.parameterHints ?? {};
 	if (hints.temperature) {
@@ -347,25 +691,15 @@ function getConfiguredReasoningEffort(model: ModelConfig, configuration: Record<
 }
 
 async function persistPickerConfiguration(base: ModelConfig, configured: ModelConfig, logger: Logger): Promise<void> {
+	if (isWrappedLanguageModelConfig(base) || isWrappedLanguageModelConfig(configured)) {
+		return;
+	}
 	if (base.reasoningEffort === configured.reasoningEffort && base.temperature === configured.temperature) {
 		return;
 	}
 	const config = vscode.workspace.getConfiguration("extendedModels");
-	const current = config.get<unknown[]>("models", []);
-	const targetId = getRuntimeModelId(configured);
-	const next = current.filter((item) => {
-		if (!item || typeof item !== "object") {
-			return true;
-		}
-		const candidate = item as Partial<ModelConfig>;
-		if (!candidate.id || !candidate.provider) {
-			return true;
-		}
-		return getRuntimeModelId(candidate as Pick<ModelConfig, "id" | "configId" | "provider">) !== targetId;
-	});
 	const override: ModelConfig = { ...configured, builtIn: undefined };
-	next.push(override);
-	await config.update("models", next, vscode.ConfigurationTarget.Global);
+	await writeScopedModelEntry(config, override, getSettings().configWriteScope);
 	logger.info("modelPicker.configuration.persisted", {
 		model: configured.id,
 		reasoningEffort: configured.reasoningEffort,
@@ -427,6 +761,52 @@ function getToolChoice(options: ProvideLanguageModelChatResponseOptions): "requi
 	return tools.length === 1 ? tools[0].name : "required";
 }
 
+async function forwardWrappedLanguageModelRequest(
+	target: vscode.LanguageModelChat,
+	messages: readonly vscode.LanguageModelChatMessage[],
+	options: ProvideLanguageModelChatResponseOptions,
+	progress: ResponseProgress,
+	token: CancellationToken,
+	state: ResponseReplayState
+): Promise<void> {
+	const requestOptions: LanguageModelChatRequestOptions = {
+		justification: "Copilot Bro wrapper profile forwarding"
+	};
+	if (options.tools?.length) {
+		requestOptions.tools = [...options.tools];
+	}
+	if (options.toolMode !== undefined) {
+		requestOptions.toolMode = options.toolMode;
+	}
+	const pickerOptions = options as ModelPickerOptions;
+	if (pickerOptions.modelOptions && typeof pickerOptions.modelOptions === "object") {
+		requestOptions.modelOptions = { ...pickerOptions.modelOptions };
+	}
+
+	const response = await target.sendRequest([...messages], requestOptions, token);
+	for await (const part of response.stream) {
+		if (part instanceof vscode.LanguageModelTextPart) {
+			state.textParts.push(part.value);
+		}
+		progress.report(part as LanguageModelResponsePart);
+	}
+}
+
+function listRuntimeModels(models: readonly ModelConfig[]): ModelConfig[] {
+	const wrapped = getCachedWrappedLanguageModelConfigs();
+	if (wrapped.length === 0) {
+		return [...models];
+	}
+	const out = new Map<string, ModelConfig>();
+	for (const model of models) {
+		out.set(getRuntimeModelId(model), model);
+	}
+	for (const model of wrapped) {
+		out.set(getRuntimeModelId(model), model);
+	}
+	return Array.from(out.values());
+}
+
 function reportStreamEvent(progress: ResponseProgress, event: StreamEvent, state: ResponseReplayState): void {
 	if (event.type === "thinking") {
 		reportThinking(progress, event.text, event.id, state, false);
@@ -458,9 +838,23 @@ function trackReplayState(state: ResponseReplayState, event: StreamEvent): void 
 				arguments: JSON.stringify(event.input)
 			}
 		});
+	} else if (event.type === "finish") {
+		state.finishReason = event.reason;
 	} else if (event.type === "usage") {
 		state.usage = event.usage;
+		if (!state.finishReason && usageIndicatesLengthStop(event.usage)) {
+			state.finishReason = "length";
+		}
 	}
+}
+
+function ensureSubstantiveChatResponse(progress: ResponseProgress, state: ResponseReplayState): void {
+	if (hasSubstantiveChatResponse(state)) {
+		return;
+	}
+	const fallback = buildThinkingOnlyFallbackText(state);
+	progress.report(new vscode.LanguageModelTextPart(fallback));
+	state.textParts.push(fallback);
 }
 
 function getEffectiveMaxOutputTokens(model: ModelConfig): number {
@@ -507,6 +901,13 @@ function reportThinking(
 		return;
 	}
 	flushThinkingDisplay(progress, state, force);
+}
+
+/** @deprecated Prefer {@link createVisionProgressReporter} batching; kept for direct one-shot reports. */
+function reportVisionProgress(progress: ResponseProgress, text: string, visible: boolean): void {
+	const reporter = createVisionProgressReporter();
+	reporter.append(text);
+	reporter.flush(progress, visible);
 }
 
 function flushThinkingDisplay(progress: ResponseProgress, state: ResponseReplayState, force: boolean): void {

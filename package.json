@@ -2,7 +2,7 @@
 	"name": "copilot-bro",
 	"displayName": "Copilot Bro",
 	"description": "Use DeepSeek, Z.AI GLM, MiniMax, Kimi, Qwen, vision proxy, prompt presets, and OpenAI-compatible models in VS Code Copilot Chat.",
-	"version": "0.1.6",
+	"version": "0.2.0",
 	"publisher": "Cloacah",
 	"icon": "icon.png",
 	"license": "MIT",
@@ -33,12 +33,12 @@
 		"deepseek",
 		"glm",
 		"zhipu",
-        "z.ai",
-        "minimax",
-        "kimi",
-        "qwen",
-        "moonshot",
-        "dashscope"
+		"z.ai",
+		"minimax",
+		"kimi",
+		"qwen",
+		"moonshot",
+		"dashscope"
 	],
 	"activationEvents": [
 		"onStartupFinished"
@@ -49,18 +49,36 @@
 			{
 				"vendor": "extendedModels",
 				"displayName": "Copilot Bro",
-				"managementCommand": "extendedModels.manage"
+				"managementCommand": "extendedModels.openModelSettings"
+			}
+		],
+		"chatParticipants": [
+			{
+				"id": "bro-smoke",
+				"name": "bro-smoke",
+				"description": "Copilot Bro Host UI smoke harness (E2E chat scenarios).",
+				"isSticky": false
 			}
 		],
 		"commands": [
 			{
 				"command": "extendedModels.manage",
-				"title": "Open Model Settings",
+				"title": "Manage Models",
 				"category": "Copilot Bro"
 			},
 			{
 				"command": "extendedModels.openModelSettings",
 				"title": "Open Model Settings",
+				"category": "Copilot Bro"
+			},
+			{
+				"command": "extendedModels.openUiSettings",
+				"title": "Open UI Settings",
+				"category": "Copilot Bro"
+			},
+			{
+				"command": "extendedModels.openScopedSettingsJson",
+				"title": "Open Copilot Bro Settings JSON (Scoped)",
 				"category": "Copilot Bro"
 			},
 			{
@@ -94,11 +112,6 @@
 				"category": "Copilot Bro"
 			},
 			{
-				"command": "extendedModels.refreshProviderModels",
-				"title": "Refresh Provider Models",
-				"category": "Copilot Bro"
-			},
-			{
 				"command": "extendedModels.selectPromptPreset",
 				"title": "Select Prompt Preset",
 				"category": "Copilot Bro"
@@ -107,16 +120,105 @@
 				"command": "extendedModels.openPromptPresetFolder",
 				"title": "Open Global Prompt Preset Folder",
 				"category": "Copilot Bro"
+			},
+			{
+				"command": "extendedModels.clearCaches",
+				"title": "Clear Config Caches and Refresh",
+				"category": "Copilot Bro"
+			},
+			{
+				"command": "extendedModels.hostUiSmokeOpenChat",
+				"title": "Open Host UI Smoke Chat",
+				"category": "Copilot Bro"
+			},
+			{
+				"command": "extendedModels.hostUiSmokeRunChatSuite",
+				"title": "Run Host UI Smoke Chat Suite",
+				"category": "Copilot Bro"
+			},
+			{
+				"command": "extendedModels.hostUiSmokeSubmitChatRequest",
+				"title": "Submit Host UI Smoke Chat Request",
+				"category": "Copilot Bro"
+			},
+			{
+				"command": "extendedModels.hostUiSmokeLogPresetCatalog",
+				"title": "Log Preset Catalog Smoke",
+				"category": "Copilot Bro"
+			},
+			{
+				"command": "extendedModels.hostUiSmokeProbeProviders",
+				"title": "Run Provider Probe Smoke",
+				"category": "Copilot Bro"
+			},
+			{
+				"command": "extendedModels.hostUiSmokeVisionContract",
+				"title": "Run Vision Contract Smoke",
+				"category": "Copilot Bro"
+			},
+			{
+				"command": "extendedModels.hostUiSmokeVisionJsonRepair",
+				"title": "Run Vision JSON Repair Smoke",
+				"category": "Copilot Bro"
+			},
+			{
+				"command": "extendedModels.hostUiSmokePhase1SettingsExhaustive",
+				"title": "Run Phase1 Settings Exhaustive Smoke",
+				"category": "Copilot Bro"
+			},
+			{
+				"command": "extendedModels.hostUiSmokePhase1SettingsRoundtrip",
+				"title": "Run Phase1 Settings Roundtrip Smoke",
+				"category": "Copilot Bro"
+			},
+			{
+				"command": "extendedModels.hostUiSmokeVisionProbe",
+				"title": "Run Vision Probe Smoke",
+				"category": "Copilot Bro"
+			},
+			{
+				"command": "extendedModels.hostUiSmokeScreenshotPageVision",
+				"title": "Run Screenshot Page Vision Smoke",
+				"category": "Copilot Bro"
+			},
+			{
+				"command": "extendedModels.hostUiSmokeVisionChatProgress",
+				"title": "Run Vision Chat Progress Smoke",
+				"category": "Copilot Bro"
+			},
+			{
+				"command": "extendedModels.hostUiSmokeP6P7RealAssets",
+				"title": "Run P6 P7 Real Assets Smoke",
+				"category": "Copilot Bro"
+			},
+			{
+				"command": "extendedModels.hostUiSmokeAgentSmokeBudgeted",
+				"title": "Run Agent Smoke Budgeted",
+				"category": "Copilot Bro"
+			},
+			{
+				"command": "extendedModels.hostUiSmokeRunRequest",
+				"title": "Run Host UI Smoke Request",
+				"category": "Copilot Bro"
 			}
 		],
+		"menus": {
+			"extension/context": [
+				{
+					"command": "extendedModels.openUiSettings",
+					"group": "2_configure@1",
+					"when": "extension == Cloacah.copilot-bro"
+				},
+				{
+					"command": "extendedModels.openScopedSettingsJson",
+					"group": "2_configure@2",
+					"when": "extension == Cloacah.copilot-bro"
+				}
+			]
+		},
 		"configuration": {
 			"title": "Copilot Bro",
 			"properties": {
-				"extendedModels.openModelSettings": {
-					"type": "string",
-					"default": "Run command: Copilot Bro: Open Model Settings",
-					"markdownDescription": "Open the visual model configuration UI: [Copilot Bro: Open Model Settings](command:extendedModels.openModelSettings). This entry is intentionally visible in Settings as a direct shortcut."
-				},
 				"extendedModels.includeBuiltInPresets": {
 					"type": "boolean",
 					"default": true,
@@ -125,7 +227,42 @@
 				"extendedModels.defaultBaseUrl": {
 					"type": "string",
 					"default": "",
-					"description": "Default OpenAI-compatible base URL used when a model does not define baseUrl."
+					"description": "Deprecated. Base URLs are resolved per provider via providerEndpoints / providerCustomBaseUrls."
+				},
+				"extendedModels.providerEndpoints": {
+					"type": "object",
+					"default": {},
+					"description": "Preferred multi-region gateway per provider key (e.g. qwen → dashscope-intl). Values are catalog profile ids from the Copilot Bro endpoint registry.",
+					"additionalProperties": {
+						"type": "string"
+					}
+				},
+				"extendedModels.providerCustomBaseUrls": {
+					"type": "object",
+					"default": {},
+					"description": "Custom OpenAI-compatible base URL per provider when endpoint profile is custom. Models do not store baseUrl.",
+					"additionalProperties": {
+						"type": "string"
+					}
+				},
+				"extendedModels.modelFamilyCustomVersions": {
+					"type": "object",
+					"default": {},
+					"description": "Custom API model version ids per model family (keys: provider::familyKey, values: version id arrays). Used by the config panel version picker.",
+					"additionalProperties": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					}
+				},
+				"extendedModels.customProviders": {
+					"type": "array",
+					"default": [],
+					"description": "Custom provider keys registered for API key management. Each entry is a lowercase provider identifier such as my-provider.",
+					"items": {
+						"type": "string"
+					}
 				},
 				"extendedModels.models": {
 					"type": "array",
@@ -172,7 +309,7 @@
 							},
 							"baseUrl": {
 								"type": "string",
-								"description": "OpenAI-compatible base URL without /chat/completions."
+								"description": "Deprecated. Use providerEndpoints / providerCustomBaseUrls. Ignored when loading custom models."
 							},
 							"family": {
 								"type": "string",
@@ -194,7 +331,7 @@
 							"vision": {
 								"type": "boolean",
 								"default": false,
-								"description": "Whether the model accepts image input."
+								"description": "Whether the model itself accepts image input natively. This only describes the model's own capability."
 							},
 							"visionProxyModelId": {
 								"type": [
@@ -202,7 +339,7 @@
 									"null"
 								],
 								"default": "",
-								"description": "Optional model ID used to describe images before this model receives the request. Empty uses the global default for non-vision models; null disables proxying for this model."
+								"description": "Controls this model's vision proxy behavior. Empty uses global vision proxy settings, \"__vision_proxy_disabled__\" (or null for backward compatibility) disables proxying for this model, and a model ID forces that proxy model."
 							},
 							"toolCalling": {
 								"type": "boolean",
@@ -334,24 +471,29 @@
 					"default": {
 						"enabled": true,
 						"defaultModelId": "",
-						"prompt": "Describe the visual contents of each image in detail for a coding assistant. Include visible text, UI state, diagrams, errors, layout, colors, and any details needed to answer the user's request. Be factual and do not solve the task yourself."
+						"customPrompt": ""
 					},
-					"description": "Vision proxy settings. Non-vision models can use another image-capable model, including built-in Copilot models, to describe images before the current model continues.",
+					"description": "Global vision proxy settings. Models whose visionProxyModelId is empty can use another image-capable model, including built-in Copilot models, to describe images before the current model continues.",
 					"properties": {
 						"enabled": {
 							"type": "boolean",
 							"default": true,
-							"description": "Enable the global vision proxy for models that do not have native vision input."
+							"description": "Enable the global vision proxy for models whose visionProxyModelId is empty."
 						},
 						"defaultModelId": {
 							"type": "string",
 							"default": "",
 							"description": "Preferred vision-capable model ID. Leave empty to auto-pick an installed image-capable Copilot model."
 						},
+						"customPrompt": {
+							"type": "string",
+							"default": "",
+							"description": "Optional custom prompt appended after the mandatory high-fidelity vision prompt."
+						},
 						"prompt": {
 							"type": "string",
-							"default": "Describe the visual contents of each image in detail for a coding assistant. Include visible text, UI state, diagrams, errors, layout, colors, and any details needed to answer the user's request. Be factual and do not solve the task yourself.",
-							"description": "Prompt sent to the vision proxy model when describing image attachments."
+							"default": "",
+							"description": "Legacy alias of customPrompt for backward compatibility."
 						}
 					}
 				},
@@ -360,12 +502,299 @@
 					"default": {
 						"selectedId": ""
 					},
-					"description": "Prompt preset selection. Presets use *.copilot-bro.prompt.md files from built-in, global, or workspace folders.",
+					"description": "Global preset prompt selection. The selected preset is injected for all Copilot Bro request paths and is automatically reinjected after compaction.",
 					"properties": {
 						"selectedId": {
 							"type": "string",
 							"default": "",
-							"description": "Selected prompt preset ID. Use Copilot Bro: Select Prompt Preset to change it."
+							"description": "Selected preset ID. Use Copilot Bro: Select Prompt Preset to change it. Empty means no extra preset text."
+						}
+					}
+				},
+				"extendedModels.visionAgent": {
+					"type": "object",
+					"default": {
+						"enabled": true,
+						"keepAliveMs": 120000,
+						"maxBatchSize": 6,
+						"maxConcurrentBatches": 1,
+						"resetContextPerBatch": true,
+						"deduplicateImages": true,
+						"dedupeByHash": true,
+						"retryOnFailure": true,
+						"autoClosePolicy": "afterMainTask"
+					},
+					"description": "Vision session orchestration contract (non-resident). 识图会话调度契约（非宿主常驻）。",
+					"properties": {
+						"enabled": {
+							"type": "boolean",
+							"default": true,
+							"description": "Enable vision session orchestration flow. 启用识图会话调度流程。"
+						},
+						"keepAliveMs": {
+							"type": "number",
+							"default": 120000,
+							"minimum": 0,
+							"maximum": 600000,
+							"description": "Session scheduling window in ms (not host residency). 会话调度窗口毫秒数（非宿主常驻）。"
+						},
+						"maxBatchSize": {
+							"type": "number",
+							"default": 6,
+							"minimum": 1,
+							"maximum": 20,
+							"description": "Maximum images per batch. 每批最大图片数。"
+						},
+						"maxConcurrentBatches": {
+							"type": "number",
+							"default": 1,
+							"minimum": 1,
+							"maximum": 20,
+							"description": "Maximum concurrent batches. 最大并发批次数。"
+						},
+						"resetContextPerBatch": {
+							"type": "boolean",
+							"default": true,
+							"description": "Reset proxy context per batch. 每批重置代理上下文。"
+						},
+						"deduplicateImages": {
+							"type": "boolean",
+							"default": true,
+							"description": "Deduplicate repeated images. 去重重复图片。"
+						},
+						"dedupeByHash": {
+							"type": "boolean",
+							"default": true,
+							"description": "Legacy alias of deduplicateImages. deduplicateImages 的兼容别名。"
+						},
+						"retryOnFailure": {
+							"type": "boolean",
+							"default": true,
+							"description": "Retry failed proxy batches. 失败时重试代理批次。"
+						},
+						"autoClosePolicy": {
+							"type": "string",
+							"default": "afterMainTask",
+							"enum": [
+								"afterMainTask",
+								"afterTimeout",
+								"never"
+							],
+							"description": "External close policy. 对外关闭策略。"
+						}
+					}
+				},
+				"extendedModels.visionIntegrity": {
+					"type": "object",
+					"default": {
+						"enabled": true,
+						"strictIntegrity": false,
+						"certaintyThreshold": 0.7,
+						"checkCount": true,
+						"checkDimensions": true,
+						"checkDigest": true,
+						"trackResize": true,
+						"trackByteSummary": true,
+						"roiMode": "full",
+						"tileMaxPixels": 4194304,
+						"detailPriority": "balanced"
+					},
+					"description": "Vision integrity checks for count/size/digest consistency and processing traceability. 用于保障数量/尺寸/摘要一致性与处理可追溯。",
+					"properties": {
+						"enabled": {
+							"type": "boolean",
+							"default": true,
+							"description": "Enable integrity verification. 启用完整性校验。"
+						},
+						"strictIntegrity": {
+							"type": "boolean",
+							"default": false,
+							"description": "Block downstream processing and return plan-only fallback when integrity checks fail. 完整性失败时阻断下游并返回仅计划回退。"
+						},
+						"certaintyThreshold": {
+							"type": "number",
+							"default": 0.7,
+							"minimum": 0,
+							"maximum": 1,
+							"description": "ROI confidence threshold for destructive-operation gating. 破坏性操作门控的 ROI 置信度阈值。"
+						},
+						"checkCount": {
+							"type": "boolean",
+							"default": true,
+							"description": "Check image counts. 校验图片数量。"
+						},
+						"checkDimensions": {
+							"type": "boolean",
+							"default": true,
+							"description": "Check image dimensions. 校验图片尺寸。"
+						},
+						"checkDigest": {
+							"type": "boolean",
+							"default": true,
+							"description": "Check digests/hashes. 校验摘要或哈希。"
+						},
+						"trackResize": {
+							"type": "boolean",
+							"default": true,
+							"description": "Track resize operations. 记录缩放过程。"
+						},
+						"trackByteSummary": {
+							"type": "boolean",
+							"default": true,
+							"description": "Track byte summaries. 记录字节摘要。"
+						},
+						"roiMode": {
+							"type": "string",
+							"default": "full",
+							"enum": [
+								"full",
+								"roi-split",
+								"smart"
+							],
+							"description": "ROI strategy. 感兴趣区域策略。"
+						},
+						"tileMaxPixels": {
+							"type": "number",
+							"default": 4194304,
+							"minimum": 1,
+							"maximum": 16777216,
+							"description": "Max pixels per tile. 每个分块的最大像素数。"
+						},
+						"detailPriority": {
+							"type": "string",
+							"default": "balanced",
+							"enum": [
+								"balanced",
+								"high",
+								"low"
+							],
+							"description": "Detail priority level. 细节优先级。"
+						}
+					}
+				},
+				"extendedModels.visionProcessing": {
+					"type": "object",
+					"default": {
+						"svgOptimize": true,
+						"imagePreprocess": true,
+						"mlSegment": false,
+						"outputVerbosity": "balanced",
+						"chatDebugVisibility": true,
+						"tokenBudgetMode": "balanced",
+						"needVisionGate": true,
+						"svgDecisionPolicy": "auto",
+						"rasterPolicy": "auto",
+						"spatialSchemaVersion": "v1",
+						"allowBBoxPlaceholderSvg": false,
+						"rasterVectorize": true
+					},
+					"description": "Vision preprocessing and output strategy balancing quality, latency, and token cost. 用于平衡识图质量、延迟和 token 成本。",
+					"properties": {
+						"svgOptimize": {
+							"type": "boolean",
+							"default": true,
+							"description": "Optimize SVG inputs. 优化 SVG 输入。"
+						},
+						"imagePreprocess": {
+							"type": "boolean",
+							"default": true,
+							"description": "Apply image preprocessing. 执行图片预处理。"
+						},
+						"mlSegment": {
+							"type": "boolean",
+							"default": false,
+							"description": "Enable ML segmentation. 启用机器学习分割。"
+						},
+						"outputVerbosity": {
+							"type": "string",
+							"default": "balanced",
+							"enum": [
+								"conservative",
+								"balanced",
+								"verbose"
+							],
+							"description": "Primary output verbosity. 主输出详细度。"
+						},
+						"chatDebugVisibility": {
+							"type": "boolean",
+							"default": true,
+							"description": "Show internal vision/debug progress markers in the chat panel only. 仅控制 Chat 面板中的内部视觉/调试进度展示。"
+						},
+						"tokenBudgetMode": {
+							"type": "string",
+							"default": "balanced",
+							"enum": [
+								"conservative",
+								"balanced",
+								"verbose"
+							],
+							"description": "Legacy alias of outputVerbosity. outputVerbosity 的兼容别名。"
+						},
+						"needVisionGate": {
+							"type": "boolean",
+							"default": true,
+							"description": "Require vision gate before processing. 处理前先经过视觉门控。"
+						},
+						"svgDecisionPolicy": {
+							"type": "string",
+							"default": "auto",
+							"enum": [
+								"auto",
+								"always",
+								"never"
+							],
+							"description": "SVG routing policy. SVG 路由策略。"
+						},
+						"rasterPolicy": {
+							"type": "string",
+							"default": "auto",
+							"enum": [
+								"auto",
+								"segment",
+								"skip"
+							],
+							"description": "Raster handling policy. 栅格图处理策略。"
+						},
+						"spatialSchemaVersion": {
+							"type": "string",
+							"default": "v1",
+							"description": "Version tag for coordinate/region schema compatibility. 坐标与区域结构的版本标记，通常保持 v1。"
+						},
+						"allowBBoxPlaceholderSvg": {
+							"type": "boolean",
+							"default": false,
+							"description": "Allow bbox-only placeholder SVG as production output. 是否允许仅 bbox 矩形占位 SVG 作为交付产物。"
+						},
+						"rasterVectorize": {
+							"type": "boolean",
+							"default": true,
+							"description": "Trace raster buffers to SVG via imagetracerjs before SVGO. 栅格图经 imagetracerjs 矢量化后再 SVGO 优化。"
+						}
+					}
+				},
+				"extendedModels.requestAttribution": {
+					"type": "object",
+					"default": {
+						"enabled": true,
+						"includeSessionId": true,
+						"includeBatchId": true
+					},
+					"description": "Request tracing settings. 请求追踪配置。",
+					"properties": {
+						"enabled": {
+							"type": "boolean",
+							"default": true,
+							"description": "Enable request tracing. 启用请求追踪。"
+						},
+						"includeSessionId": {
+							"type": "boolean",
+							"default": true,
+							"description": "Attach session ID to vision batch paths. 识图代理会话路径附加 sessionId。"
+						},
+						"includeBatchId": {
+							"type": "boolean",
+							"default": true,
+							"description": "Attach batch ID to vision batch paths. 识图批处理路径附加 batchId。"
 						}
 					}
 				},
@@ -395,30 +824,73 @@
 						"en"
 					],
 					"description": "Language used by the visual configuration page."
+				},
+				"extendedModels.configWriteScope": {
+					"type": "string",
+					"default": "global",
+					"enum": [
+						"workspace",
+						"global"
+					],
+					"description": "Default save scope for settings fields not yet defined at any layer (typically User settings when Global). Read/write use the same field ownership: effective value comes from folder > workspace > user; writes go to the layer that owns that field, otherwise this default. Choose Workspace to prefer the workspace settings file (often .vscode/settings.json)."
 				}
 			}
 		}
 	},
 	"scripts": {
-		"compile": "tsc -p ./",
-		"watch": "tsc -watch -p ./",
+		"clean": "node scripts/build/clean-out.mjs",
+		"compile": "npm run clean && tsc -p tsconfig.extension.json && tsc -p tsconfig.test.json",
+		"compile:extension": "tsc -p tsconfig.extension.json",
+		"compile:test": "tsc -p tsconfig.test.json",
+		"watch": "tsc -watch -p tsconfig.extension.json",
 		"lint": "eslint .",
 		"test": "npm run compile && node --test \"out/test/**/*.test.js\"",
+		"test:host-ui": "npm run compile && node out/e2e/driver/hostUiSmoke.js",
+		"test:host-ui:chat-acceptance": "node scripts/host-ui/run-host-ui-chat-acceptance.mjs",
+		"test:host-ui:analyze-chat": "node scripts/host-ui/analyze-host-ui-smoke-chat.mjs",
+		"test:host-ui:full": "npm run compile && node scripts/host-ui/run-host-ui-smoke.mjs full",
+		"readme:generate": "npm run compile && node scripts/readme/generate-readme.mjs",
+		"readme:check": "npm run compile && node scripts/readme/generate-readme.mjs --check",
+		"readme:parity": "node scripts/readme/readme-section-parity.mjs",
+		"catalog:qwen": "node scripts/catalog/build-qwen-model-families.mjs",
+		"catalog:zhipu": "node scripts/catalog/build-zhipu-model-families.mjs",
+		"catalog:build": "npm run catalog:qwen && npm run catalog:zhipu",
+		"catalog:verify": "node scripts/catalog/verify-catalogs-committed.mjs",
+		"readme:migrate": "node scripts/readme/migrate-readme-to-config.mjs",
+		"prepare:benchmark-screenshot": "node scripts/host-ui/prepare-benchmark-screenshot.mjs",
 		"vscode:prepublish": "npm run compile",
-		"package": "vsce package",
-		"package:vsix": "npm run package",
-		"build:vsix": "npm run package",
+		"package": "npm run package:release",
+		"package:release": "npm run compile && node scripts/build/package-vsix.mjs release",
+		"package:test": "npm run compile && node scripts/build/package-vsix.mjs test",
+		"package:verify": "node scripts/build/verify-vsix-packages.mjs",
+		"package:verify-release": "node scripts/build/verify-release-vsix.mjs",
+		"package:verify-release:build": "node scripts/build/verify-release-vsix.mjs --build",
+		"package:vsix": "npm run package:release",
+		"build:vsix": "npm run package:release",
 		"release:vsix": "node scripts/release-vsix.mjs",
-		"install:vscode": "code --install-extension copilot-bro-0.1.6.vsix --force",
+		"install:vscode": "code --install-extension copilot-bro-0.2.0.vsix --force",
 		"publish:marketplace": "vsce publish"
 	},
 	"devDependencies": {
 		"@eslint/js": "latest",
+		"@nut-tree-fork/nut-js": "^4.2.6",
 		"@types/node": "latest",
 		"@types/vscode": "^1.104.0",
 		"@vscode/vsce": "latest",
+		"clipboardy": "^5.3.1",
 		"eslint": "latest",
+		"node-window-manager": "^2.2.4",
+		"playwright": "^1.50.0",
+		"screenshot-desktop": "^1.15.4",
 		"typescript": "latest",
 		"typescript-eslint": "latest"
+	},
+	"dependencies": {
+		"image-js": "^1.6.0",
+		"imagetracerjs": "^1.2.6",
+		"jimp": "^1.6.1",
+		"sharp": "^0.34.5",
+		"svg-path-commander": "^2.2.1",
+		"svgo": "^4.0.1"
 	}
 }

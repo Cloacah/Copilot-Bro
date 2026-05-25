@@ -30,9 +30,7 @@ export function buildRequestBody(
 		body.reasoning_effort = model.reasoningEffort;
 	}
 	if (shouldSendThinking(model)) {
-		body.thinking = isKimiModel(model) && model.thinking?.type === "enabled"
-			? { type: "enabled", keep: "all" }
-			: { type: model.thinking?.type };
+		body.thinking = buildThinkingPayload(model);
 	}
 
 	if (tools.length > 0 && model.toolCalling) {
@@ -54,12 +52,17 @@ export function buildRequestBody(
 	return body;
 }
 
-export function buildHeaders(apiKey: string, model: ModelConfig): Record<string, string> {
+export function buildHeaders(
+	apiKey: string,
+	model: ModelConfig,
+	extraHeaders: Record<string, string> = {}
+): Record<string, string> {
 	return {
 		"Authorization": `Bearer ${apiKey}`,
 		"Content-Type": "application/json",
 		"Accept": "text/event-stream",
 		"User-Agent": "copilot-bro/0.1.4",
+		...extraHeaders,
 		...model.headers
 	};
 }
@@ -86,6 +89,26 @@ function isKimiModel(model: ModelConfig): boolean {
 	const provider = model.provider.trim().toLowerCase();
 	const baseUrl = model.baseUrl?.toLowerCase() ?? "";
 	return provider.includes("kimi") || provider.includes("moonshot") || baseUrl.includes("moonshot");
+}
+
+/** Moonshot v1 rejects `thinking.keep`; multimodal K2.5/K2.6 support it for reasoning replay. */
+export function kimiSupportsThinkingKeep(model: ModelConfig): boolean {
+	const id = model.id.trim().toLowerCase();
+	if (/moonshot-v1|moonshot-v1-/i.test(id)) {
+		return false;
+	}
+	return id === "kimi-k2.5" || id === "kimi-k2.6";
+}
+
+function buildThinkingPayload(model: ModelConfig): { type: "enabled" | "disabled"; keep?: "all" } {
+	const type = model.thinking?.type;
+	if (type !== "enabled" && type !== "disabled") {
+		return { type: "disabled" };
+	}
+	if (isKimiModel(model) && type === "enabled" && kimiSupportsThinkingKeep(model)) {
+		return { type: "enabled", keep: "all" };
+	}
+	return { type };
 }
 
 function convertTools(tools: readonly unknown[]): OpenAIToolDefinition[] {

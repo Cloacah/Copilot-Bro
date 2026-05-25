@@ -1,0 +1,300 @@
+{
+  "source": "dashscope-api-v1-models",
+  "fetchedAt": "2026-05-25T02:31:20.028Z",
+  "apiTotal": 70,
+  "filters": {
+    "providers": [
+      "qwen",
+      "wan"
+    ],
+    "capabilities": [
+      "TG",
+      "Reasoning",
+      "VU"
+    ]
+  },
+  "consoleUrl": "https://bailian.console.aliyun.com/cn-beijing/?tab=model#/model-market/all?providers=qwen%2Cwan&capabilities=TG%2CReasoning%2CVU",
+  "familyCount": 24,
+  "modelCount": 70,
+  "grouping": "bailian-model-card",
+  "families": [
+    {
+      "familyKey": "qwen3.6-open-source",
+      "displayName": "Qwen3.6 Open Source",
+      "category": "qwen3.6",
+      "defaultVersionId": "qwen3.6-27b",
+      "versionIds": [
+        "qwen3.6-35b-a3b",
+        "qwen3.6-27b"
+      ],
+      "vision": true
+    },
+    {
+      "familyKey": "qwen3.6-flash",
+      "displayName": "Qwen3.6-Flash",
+      "category": "qwen3.6",
+      "defaultVersionId": "qwen3.6-flash",
+      "versionIds": [
+        "qwen3.6-flash",
+        "qwen3.6-flash-2026-04-16"
+      ],
+      "vision": true
+    },
+    {
+      "familyKey": "qwen3.6-max",
+      "displayName": "Qwen3.6-Max",
+      "category": "qwen3.6",
+      "defaultVersionId": "qwen3.6-max-preview",
+      "versionIds": [
+        "qwen3.6-max-preview"
+      ]
+    },
+    {
+      "familyKey": "qwen3.6-plus",
+      "displayName": "Qwen3.6-Plus",
+      "category": "qwen3.6",
+      "defaultVersionId": "qwen3.6-plus-2026-04-02",
+      "versionIds": [
+        "qwen3.6-plus",
+        "qwen3.6-plus-2026-04-02"
+      ],
+      "vision": true
+    },
+    {
+      "familyKey": "qwen3.5-open-source",
+      "displayName": "Qwen3.5 Open Source",
+      "category": "qwen3.5",
+      "defaultVersionId": "qwen3.5-27b",
+      "versionIds": [
+        "qwen3.5-397b-a17b",
+        "qwen3.5-35b-a3b",
+        "qwen3.5-27b",
+        "qwen3.5-122b-a10b"
+      ],
+      "vision": true
+    },
+    {
+      "familyKey": "qwen3.5-flash",
+      "displayName": "Qwen3.5-Flash",
+      "category": "qwen3.5",
+      "defaultVersionId": "qwen3.5-flash",
+      "versionIds": [
+        "qwen3.5-flash",
+        "qwen3.5-flash-2026-02-23"
+      ],
+      "vision": true
+    },
+    {
+      "familyKey": "qwen3.5-plus",
+      "displayName": "Qwen3.5-Plus",
+      "category": "qwen3.5",
+      "defaultVersionId": "qwen3.5-plus-2026-04-20",
+      "versionIds": [
+        "qwen3.5-plus",
+        "qwen3.5-plus-2026-04-20",
+        "qwen3.5-plus-2026-02-15"
+      ],
+      "vision": true
+    },
+    {
+      "familyKey": "qwen-flash",
+      "displayName": "Qwen-Flash",
+      "category": "qwen3",
+      "defaultVersionId": "qwen-flash",
+      "versionIds": [
+        "qwen-flash",
+        "qwen-flash-2025-07-28"
+      ]
+    },
+    {
+      "familyKey": "qwen-flash-character",
+      "displayName": "Qwen-Flash-Character",
+      "category": "qwen3",
+      "defaultVersionId": "qwen-flash-character",
+      "versionIds": [
+        "qwen-flash-character"
+      ]
+    },
+    {
+      "familyKey": "qwen-plus",
+      "displayName": "Qwen-Plus",
+      "category": "qwen3",
+      "defaultVersionId": "qwen-plus-2025-12-01",
+      "versionIds": [
+        "qwen-plus-latest",
+        "qwen-plus-1220",
+        "qwen-plus-0112",
+        "qwen-plus",
+        "qwen-plus-2025-12-01",
+        "qwen-plus-2025-09-11",
+        "qwen-plus-2025-07-28",
+        "qwen-plus-2025-07-14",
+        "qwen-plus-2025-04-28",
+        "qwen-plus-2025-01-25"
+      ]
+    },
+    {
+      "familyKey": "qwen3-open-source",
+      "displayName": "Qwen3 Open Source",
+      "category": "qwen3",
+      "defaultVersionId": "qwen3-coder-next",
+      "versionIds": [
+        "qwen3-next-80b-a3b-thinking",
+        "qwen3-next-80b-a3b-instruct",
+        "qwen3-coder-next",
+        "qwen3-8b",
+        "qwen3-32b",
+        "qwen3-30b-a3b-thinking-2507",
+        "qwen3-30b-a3b-instruct-2507",
+        "qwen3-30b-a3b",
+        "qwen3-235b-a22b-thinking-2507",
+        "qwen3-235b-a22b-instruct-2507",
+        "qwen3-235b-a22b",
+        "qwen3-14b"
+      ]
+    },
+    {
+      "familyKey": "qwen3-max",
+      "displayName": "Qwen3-Max",
+      "category": "qwen3",
+      "defaultVersionId": "qwen3-max-2026-01-23",
+      "versionIds": [
+        "qwen3-max-preview",
+        "qwen3-max",
+        "qwen3-max-2026-01-23",
+        "qwen3-max-2025-09-23"
+      ]
+    },
+    {
+      "familyKey": "qwen3-vl-open-source",
+      "displayName": "Qwen3-VL Open Source",
+      "category": "qwen3",
+      "defaultVersionId": "qwen3-vl-235b-a22b-instruct",
+      "versionIds": [
+        "qwen3-vl-8b-thinking",
+        "qwen3-vl-8b-instruct",
+        "qwen3-vl-32b-thinking",
+        "qwen3-vl-32b-instruct",
+        "qwen3-vl-30b-a3b-thinking",
+        "qwen3-vl-30b-a3b-instruct",
+        "qwen3-vl-235b-a22b-thinking",
+        "qwen3-vl-235b-a22b-instruct"
+      ],
+      "vision": true
+    },
+    {
+      "familyKey": "qwen3-vl-flash",
+      "displayName": "Qwen3-VL-Flash",
+      "category": "qwen3",
+      "defaultVersionId": "qwen3-vl-flash",
+      "versionIds": [
+        "qwen3-vl-flash",
+        "qwen3-vl-flash-2026-01-22",
+        "qwen3-vl-flash-2025-10-15"
+      ],
+      "vision": true
+    },
+    {
+      "familyKey": "qwen3-vl-plus",
+      "displayName": "Qwen3-VL-Plus",
+      "category": "qwen3",
+      "defaultVersionId": "qwen3-vl-plus",
+      "versionIds": [
+        "qwen3-vl-plus",
+        "qwen3-vl-plus-2025-12-19",
+        "qwen3-vl-plus-2025-09-23"
+      ],
+      "vision": true
+    },
+    {
+      "familyKey": "qwen-max",
+      "displayName": "Qwen-Max",
+      "category": "qwen",
+      "defaultVersionId": "qwen-max",
+      "versionIds": [
+        "qwen-max"
+      ]
+    },
+    {
+      "familyKey": "qvq-max",
+      "displayName": "QVQ-Max",
+      "category": "legacy",
+      "defaultVersionId": "qvq-max",
+      "versionIds": [
+        "qvq-max"
+      ],
+      "vision": true,
+      "thinking": "enabled"
+    },
+    {
+      "familyKey": "qvq-plus",
+      "displayName": "Qwen-QVQ-Plus",
+      "category": "legacy",
+      "defaultVersionId": "qvq-plus",
+      "versionIds": [
+        "qvq-plus"
+      ],
+      "vision": true,
+      "thinking": "enabled"
+    },
+    {
+      "familyKey": "qwq-plus",
+      "displayName": "Qwen-QwQ-Plus",
+      "category": "legacy",
+      "defaultVersionId": "qwq-plus",
+      "versionIds": [
+        "qwq-plus"
+      ],
+      "thinking": "enabled"
+    },
+    {
+      "familyKey": "qwen-turbo",
+      "displayName": "Qwen-Turbo",
+      "category": "legacy",
+      "defaultVersionId": "qwen-turbo",
+      "versionIds": [
+        "qwen-turbo"
+      ]
+    },
+    {
+      "familyKey": "qwen-vl-max",
+      "displayName": "Qwen-VL-Max",
+      "category": "legacy",
+      "defaultVersionId": "qwen-vl-max",
+      "versionIds": [
+        "qwen-vl-max"
+      ],
+      "vision": true
+    },
+    {
+      "familyKey": "qwenvl-plus",
+      "displayName": "Qwen-VL-Plus",
+      "category": "legacy",
+      "defaultVersionId": "qwen-vl-plus-latest",
+      "versionIds": [
+        "qwen-vl-plus-latest",
+        "qwen-vl-plus"
+      ],
+      "vision": true
+    },
+    {
+      "familyKey": "intent-detect",
+      "displayName": "Intent Classification",
+      "category": "tools",
+      "defaultVersionId": "tongyi-intent-detect-v3",
+      "versionIds": [
+        "tongyi-intent-detect-v3"
+      ]
+    },
+    {
+      "familyKey": "qwen3.7-max",
+      "displayName": "Qwen3.7-Max",
+      "category": "qwen3.7",
+      "defaultVersionId": "qwen3.7-max",
+      "versionIds": [
+        "qwen3.7-max",
+        "qwen3.7-max-2026-05-20"
+      ]
+    }
+  ]
+}

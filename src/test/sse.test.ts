@@ -20,7 +20,9 @@ test("OpenAIStreamParser parses text, thinking, and tool calls", async () => {
 
 	assert.equal(events[0].type, "thinking");
 	assert.equal(events[1].type, "text");
-	assert.deepEqual(events[2], {
+	assert.equal(events[2].type, "finish");
+	assert.equal((events[2] as Extract<StreamEvent, { type: "finish" }>).reason, "tool_calls");
+	assert.deepEqual(events[3], {
 		type: "tool_call",
 		id: "call-1",
 		name: "read_file",
@@ -47,6 +49,7 @@ test("OpenAIStreamParser returns after tool_calls finish without waiting for DON
 	});
 
 	assert.deepEqual(events, [
+		{ type: "finish", reason: "tool_calls" },
 		{
 			type: "tool_call",
 			id: "call-early",
@@ -86,6 +89,7 @@ test("OpenAIStreamParser reads reasoning from choice.message tool-call chunks", 
 	assert.equal(thinkingEvent.type, "thinking");
 	assert.deepEqual(events, [
 		{ type: "thinking", text: "message reasoning", id: thinkingEvent.id },
+		{ type: "finish", reason: "tool_calls" },
 		{
 			type: "tool_call",
 			id: "call-message",
@@ -93,6 +97,26 @@ test("OpenAIStreamParser reads reasoning from choice.message tool-call chunks", 
 			input: { path: "a.ts" }
 		}
 	]);
+});
+
+test("OpenAIStreamParser de-duplicates cumulative scalar reasoning_content", async () => {
+	const stream = toStream([
+		`data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: "think" } }] })}\n\n`,
+		`data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: "thinking" } }] })}\n\n`,
+		`data: ${JSON.stringify({ choices: [{ delta: { content: "answer" }, finish_reason: "stop" }] })}\n\n`,
+		"data: [DONE]\n\n"
+	]);
+	const events: StreamEvent[] = [];
+	const parser = new OpenAIStreamParser();
+
+	await parser.parse(stream, (event) => {
+		events.push(event);
+	});
+
+	assert.deepEqual(events.map((event) => event.type), ["thinking", "thinking", "text", "finish"]);
+	assert.equal((events[0] as Extract<StreamEvent, { type: "thinking" }>).text, "think");
+	assert.equal((events[1] as Extract<StreamEvent, { type: "thinking" }>).text, "ing");
+	assert.equal((events[3] as Extract<StreamEvent, { type: "finish" }>).reason, "stop");
 });
 
 test("OpenAIStreamParser emits usage and de-duplicates cumulative reasoning details", async () => {

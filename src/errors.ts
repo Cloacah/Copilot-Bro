@@ -1,4 +1,5 @@
 import type { ProviderErrorDetails } from "./types";
+import { inferHttpRetryable, parseProviderErrorBody } from "./providerTransientErrors";
 
 const DEFAULT_RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
 const NETWORK_PATTERNS = [
@@ -51,11 +52,13 @@ export class ProviderError extends Error {
 
 export function createHttpError(status: number, statusText: string, body: string, url: string): ProviderError {
 	const message = `Provider API error: [${status}] ${statusText}${body ? `\n${body}` : ""}`;
+	const { businessCode } = parseProviderErrorBody(body);
 	return new ProviderError(message, {
 		status,
 		body,
 		url,
-		retryable: DEFAULT_RETRYABLE_STATUS_CODES.has(status)
+		code: businessCode,
+		retryable: inferHttpRetryable(status, businessCode)
 	});
 }
 

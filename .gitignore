@@ -5,3 +5,9 @@ out/
 .vscode-test/
 .DS_Store
 npm-debug.log*
+
+# Host UI smoke test artifacts
+artifacts/
+
+# Repo-root vision run outputs (workspace-relative contract unchanged)
+vision-artifacts/

@@ -1,4 +1,6 @@
 import * as vscode from "vscode";
+import { formatSmokeLogEvidenceLine, recordHostUiSmokeLogLine } from "./smokeLogBridge/smokeLogEvidence";
+import { appendMirroredLogLine, resolveMirroredLogFilePath } from "./loggerMirror";
 import type { LogLevel } from "./types";
 
 const LEVELS: Record<Exclude<LogLevel, "off">, number> = {
@@ -46,7 +48,20 @@ export class Logger {
 		}
 		const timestamp = new Date().toISOString();
 		const suffix = data === undefined ? "" : ` ${JSON.stringify(redact(data))}`;
-		this.channel.appendLine(`[${timestamp}] [${level.toUpperCase()}] ${message}${suffix}`);
+		const line = `[${timestamp}] [${level.toUpperCase()}] ${message}${suffix}`;
+		if (process.env.COPILOT_BRO_UI_SMOKE === "1") {
+			recordHostUiSmokeLogLine(formatSmokeLogEvidenceLine(message, data, redact));
+		}
+		this.channel.appendLine(line);
+		try {
+			const mirroredLogFilePath = resolveMirroredLogFilePath(
+				process.env,
+				vscode.workspace.getConfiguration("extendedModels").get<string>("automationLogFile")
+			);
+			appendMirroredLogLine(mirroredLogFilePath, line);
+		} catch {
+			// File mirroring is best-effort and must not break runtime logging.
+		}
 	}
 }
 

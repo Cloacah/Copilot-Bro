@@ -32,9 +32,13 @@ export interface ModelParameterHints {
 	thinking?: SelectParameterHint;
 }
 
+export type ModelSource = "remote" | "vscode-lm-wrapper";
+
 export interface ModelConfig {
 	id: string;
 	displayName?: string;
+	/** Stable picker identity within a provider; API model id is in `id`. */
+	modelFamilyKey?: string;
 	configId?: string;
 	provider: string;
 	providerDisplayName?: string;
@@ -57,22 +61,97 @@ export interface ModelConfig {
 	editTools: string[];
 	parameterHints?: ModelParameterHints;
 	documentationUrl?: string;
+	modelSource?: ModelSource;
+	wrappedLanguageModelId?: string;
+	wrappedLanguageModelVendor?: string;
+	wrappedLanguageModelFamily?: string;
 	builtIn?: boolean;
 }
 
 export interface VisionProxySettings {
 	enabled: boolean;
 	defaultModelId: string;
-	prompt: string;
+	customPrompt: string;
 }
+
+export type ConfigWriteScope = "workspace" | "global";
 
 export interface PromptPresetSettings {
 	selectedId: string;
 }
 
+export type VisionAgentAutoClosePolicy = "afterMainTask" | "afterTimeout" | "never";
+
+export interface VisionAgentConfig {
+	enabled: boolean;
+	keepAliveMs: number;
+	maxBatchSize: number;
+	maxConcurrentBatches: number;
+	resetContextPerBatch: boolean;
+	deduplicateImages: boolean;
+	dedupeByHash: boolean;
+	retryOnFailure: boolean;
+	autoClosePolicy: VisionAgentAutoClosePolicy;
+}
+
+export type VisionRoiMode = "full" | "roi-split" | "smart";
+export type VisionDetailPriority = "balanced" | "high" | "low";
+
+export interface VisionIntegrityConfig {
+	enabled: boolean;
+	strictIntegrity: boolean;
+	certaintyThreshold: number;
+	checkCount: boolean;
+	checkDimensions: boolean;
+	checkDigest: boolean;
+	trackResize: boolean;
+	trackByteSummary: boolean;
+	roiMode: VisionRoiMode;
+	tileMaxPixels: number;
+	detailPriority: VisionDetailPriority;
+}
+
+export type VisionOutputVerbosity = "conservative" | "balanced" | "verbose";
+export type SvgDecisionPolicy = "auto" | "always" | "never";
+export type RasterPolicy = "auto" | "segment" | "skip";
+
+export interface VisionProcessingConfig {
+	svgOptimize: boolean;
+	imagePreprocess: boolean;
+	mlSegment: boolean;
+	outputVerbosity: VisionOutputVerbosity;
+	chatDebugVisibility: boolean;
+	tokenBudgetMode: VisionOutputVerbosity;
+	needVisionGate: boolean;
+	svgDecisionPolicy: SvgDecisionPolicy;
+	rasterPolicy: RasterPolicy;
+	spatialSchemaVersion: string;
+	highFidelityPrompt: string;
+	/** When false (default), proxy SVG mode must not emit bbox-only placeholder SVG. */
+	allowBBoxPlaceholderSvg?: boolean;
+	/** When true (default), raster buffers are traced to SVG via imagetracerjs before SVGO/path fit. */
+	rasterVectorize?: boolean;
+	/** Max long edge (px) before raster vectorization; reduces path count and vision retry cost. */
+	maxVectorizeEdgePx?: number;
+}
+
+
+export interface RequestAttributionConfig {
+	enabled: boolean;
+	includeSessionId: boolean;
+	includeBatchId: boolean;
+}
+
 export interface ExtensionSettings {
 	includeBuiltInPresets: boolean;
+	/** @deprecated Provider-owned URLs only; always empty at runtime. */
 	defaultBaseUrl: string;
+	/** Workspace preference: provider key → catalog profile id (multi-region gateways). */
+	providerEndpoints: Record<string, string>;
+	/** Custom base URL per provider when endpoint profile is "custom". */
+	providerCustomBaseUrls: Record<string, string>;
+	/** Custom API model ids per family (`provider::familyKey` → version ids). */
+	modelFamilyCustomVersions: Record<string, string[]>;
 	models: ModelConfig[];
 	visionProxy: VisionProxySettings;
 	promptPresets: PromptPresetSettings;
@@ -80,13 +159,11 @@ export interface ExtensionSettings {
 	requestTimeoutMs: number;
 	logLevel: LogLevel;
 	uiLanguage: "zh" | "en";
-}
-
-export interface ModelCatalogState {
-	models: ModelConfig[];
-	refreshedProviders: string[];
-	updatedAt: number;
-	errors?: Record<string, string>;
+	configWriteScope: ConfigWriteScope;
+	visionAgent: VisionAgentConfig;
+	visionIntegrity: VisionIntegrityConfig;
+	visionProcessing: VisionProcessingConfig;
+	requestAttribution: RequestAttributionConfig;
 }
 
 export interface ProviderErrorDetails {
@@ -161,4 +238,5 @@ export type StreamEvent =
 	| { type: "text"; text: string }
 	| { type: "thinking"; text: string; id?: string }
 	| { type: "tool_call"; id: string; name: string; input: Record<string, unknown> }
-	| { type: "usage"; usage: ChatCompletionUsage };
+	| { type: "usage"; usage: ChatCompletionUsage }
+	| { type: "finish"; reason: string };

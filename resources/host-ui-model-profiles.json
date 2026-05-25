@@ -1,0 +1,34 @@
+{
+  "description": "Host UI chat integration model profiles (runtime id fallback chains). Source of truth: src/e2e/hostUi/chat/hostUiModelProfiles.ts",
+  "envOverridePrefix": "COPILOT_BRO_UI_SMOKE_MODEL_PROFILE_",
+  "envOverrideExample": "COPILOT_BRO_UI_SMOKE_MODEL_PROFILE_DEEPSEEK_TEXT=deepseek-v4-flash::deepseek,deepseek-v4-pro::deepseek",
+  "defaultTextProfile": "deepseek.text",
+  "profiles": {
+    "deepseek.text": ["deepseek-v4-flash::deepseek"],
+    "deepseek.text.pro": ["deepseek-v4-pro::deepseek"],
+    "deepseek.vision-proxy": ["deepseek-v4-flash::deepseek"],
+    "qwen.vl-native": ["qwen3-vl-open-source::qwen"],
+    "qwen.text-probe": ["qwen-turbo::qwen", "qwen3.5-flash::qwen"],
+    "zhipu.text": [
+      "glm-4-flash::zhipu",
+      "glm-4.7-flash::zhipu",
+      "glm-4.5-flash::zhipu",
+      "glm-4.7-flashx::zhipu"
+    ],
+    "zhipu.text.tool": [
+      "glm-4-flash::zhipu",
+      "glm-4.7-flash::zhipu",
+      "glm-4.5-flash::zhipu",
+      "glm-5.1::zhipu"
+    ],
+    "zhipu.vision-native": [
+      "glm-4.6v-flash::zhipu",
+      "glm-4.1v-thinking::zhipu",
+      "glm-4v-flash::zhipu",
+      "glm-5v-turbo::zhipu"
+    ],
+    "kimi.text": ["moonshot-v1::kimi", "kimi-k2.6::kimi"],
+    "minimax.text": ["MiniMax-M2.7-highspeed::minimax", "MiniMax-M2.7::minimax"],
+    "p4.self-refer": ["deepseek-v4-flash::deepseek"]
+  }
+}

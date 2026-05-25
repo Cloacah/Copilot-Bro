@@ -2,6 +2,45 @@
 
 All notable changes to this project are documented here.
 
+## [0.2.0] - 2026-05-21
+
+### Changed
+
+- **README** — removed the placeholder “Screenshots” section; added high-fidelity vision flow diagrams for **native** and **proxy** routes; added a **Visible settings guide** aligned with the configuration page and Phase 1 UI; expanded the generated configuration reference (integrity checks, defaults, restore-pipeline suspension note).
+- **Code structure** — split extension smoke/runtime modules, vision structured-pass routing, smoke log bridge, and `scripts/` / `tsconfig` layout per `plan/CODE_STRUCTURE_OPTIMIZATION.plan.md` (P1–P3 closed).
+- **Host UI** — default chat acceptance runs **16** integration scenarios (canonical 17; `p7-chat-benchmark-web-restore` opt-in); stall gate uses executable turns; `p5-qwen-vl-native-chat` uses `native-vision` kind; log evidence validator aligns with live log-watch on `ok:false`.
+- **Vision retry** — structured vision pass honors `retry.enabled` (format loop + HTTP attempts).
+- **Release VSIX** — `.vscodeignore` excludes all `out/e2e/**` outputs (smoke still in `extension.js` when env-gated).
+- **npm scripts** — `release:vsix` path fix; `install:vscode` targets 0.2.0; `plan/` tracked in git.
+
+### Added
+
+- Host UI chat acceptance (`npm run test:host-ui:chat-acceptance`, 16 default / 17 canonical) and README generation workflow (`npm run readme:generate` / `readme:check`).
+- `npm run catalog:verify` — fails when committed Qwen/Zhipu catalog artifacts drift after rebuild.
+- Unit tests for `secretsStorage`, `visionStructuredRetryPolicy`, and release VSIX `out/e2e/**` deny policy.
+
+## [0.1.8] - 2026-05-09
+
+### Changed
+
+- **Vision Settings card** — merged the standalone "Vision Proxy" card and the "Vision Agent Session" phase1 section into a single **识图设置 / Vision Settings** card, with the proxy basic config at the top and the advanced session controls below a divider. Labels are now clearly differentiated ("识图代理基础配置" vs. "识图代理会话").
+- **Provider Model Editor** — removed the separate "添加自定义供应商 / 模型" card; all new-model fields are now embedded as a collapsible **"▶ 添加新模型"** section at the bottom of the editor card, keeping the page cleaner by default.
+- **Request Tracing** — renamed "请求归属追踪" section to "请求追踪"; removed four runtime-only fields (`requestId`, `sessionId`, `batchId`, `batchIndex`) that were never user-configurable settings; improved help text to explain what the three remaining fields actually do.
+
+### Fixed
+
+- `requestId`, `sessionId`, `batchId`, `batchIndex` no longer appear in `extendedModels.requestAttribution` schema or the settings UI. They remain runtime-generated trace values and are passed programmatically via overrides, not read from user settings.
+
+## [0.1.7] - 2026-05-08
+
+### Added
+
+- Add a **Provider Management** card to the configuration page that lists all registered providers with key status (✓ / ✗), inline `Set Key` buttons for any provider, `Delete Provider` buttons for custom-only providers, and an `Add Provider` input at the bottom.
+- Add `Delete Model` button next to the model selector in the model editor; the button only appears for custom (non-built-in) models.
+- Expose `contextLength` field in the model editor grid; built-in preset values are labeled "not recommended to change" while custom models can set this freely.
+- Add `extendedModels.customProviders` setting (`string[]`) for registering API-key-only providers that have no preset models.
+- Allow `Copilot Bro: Set Provider API Key` command to accept an optional provider argument so inline `Set Key` buttons in the provider list open the prompt pre-filled for the selected provider.
+
 ## [0.1.6] - 2026-04-30
 
 ### Fixed

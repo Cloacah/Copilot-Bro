@@ -1,9 +1,14 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
+import type { Logger } from "./logger";
 import type { ExtensionSettings, OpenAIMessage } from "./types";
 
 export const PROMPT_PRESET_GLOB = "*.copilot-bro.prompt.md";
 const SELECTED_PRESET_KEY = "extendedModels.promptPresets.selectedId";
+
+export interface PromptPresetApplyOptions {
+	readonly logger?: Pick<Logger, "info">;
+}
 
 export interface PromptPreset {
 	id: string;
@@ -15,32 +20,78 @@ export interface PromptPreset {
 export async function prependSelectedPromptPreset(
 	context: vscode.ExtensionContext,
 	settings: ExtensionSettings,
-	messages: OpenAIMessage[]
+	messages: OpenAIMessage[],
+	options?: PromptPresetApplyOptions
 ): Promise<OpenAIMessage[]> {
 	const selectedId = getSelectedPromptPresetId(context, settings);
 	if (!selectedId) {
 		return messages;
 	}
 	const preset = (await listPromptPresets(context)).find((item) => item.id === selectedId);
-	if (!preset) {
+	const presetContent = preset ? await readPromptPreset(preset.uri) : undefined;
+	if (!preset || !presetContent?.trim()) {
 		return messages;
 	}
-	const content = await readPromptPreset(preset.uri);
-	if (!content.trim()) {
-		return messages;
-	}
+	const content = [
+		`Copilot Bro preset prompt: ${preset.label}`,
+		`Source: ${preset.source}`,
+		"",
+		presetContent.trim()
+	].join("\n");
+	options?.logger?.info("prompt.preset.applied", {
+		presetId: preset.id,
+		label: preset.label,
+		source: preset.source,
+		contentLength: content.length
+	});
 	return [
 		{
 			role: "system",
-			content: [
-				`Copilot Bro preset prompt: ${preset.label}`,
-				`Source: ${preset.source}`,
-				"",
-				content.trim()
-			].join("\n")
+			content
 		},
 		...messages
 	];
+}
+
+/** Host UI / automation: persist preset selection without QuickPick. */
+export async function persistSelectedPromptPreset(
+	context: vscode.ExtensionContext,
+	presetId: string
+): Promise<void> {
+	const normalized = presetId.trim();
+	await context.workspaceState.update(SELECTED_PRESET_KEY, normalized);
+	const target = vscode.workspace.workspaceFolders?.length
+		? vscode.ConfigurationTarget.Workspace
+		: vscode.ConfigurationTarget.Global;
+	await vscode.workspace.getConfiguration("extendedModels").update(
+		"promptPresets",
+		{ selectedId: normalized },
+		target
+	);
+}
+
+export async function resolveSelectedPromptPresetContent(
+	context: vscode.ExtensionContext,
+	settings: ExtensionSettings
+): Promise<string | undefined> {
+	const selectedId = getSelectedPromptPresetId(context, settings);
+	if (!selectedId) {
+		return undefined;
+	}
+	const preset = (await listPromptPresets(context)).find((item) => item.id === selectedId);
+	if (!preset) {
+		return undefined;
+	}
+	const content = await readPromptPreset(preset.uri);
+	if (!content.trim()) {
+		return undefined;
+	}
+	return [
+		`Copilot Bro preset prompt: ${preset.label}`,
+		`Source: ${preset.source}`,
+		"",
+		content.trim()
+	].join("\n");
 }
 
 export async function selectPromptPreset(context: vscode.ExtensionContext): Promise<void> {
@@ -68,9 +119,7 @@ export async function selectPromptPreset(context: vscode.ExtensionContext): Prom
 	if (!picked) {
 		return;
 	}
-	await context.workspaceState.update(SELECTED_PRESET_KEY, picked.id);
-	const target = vscode.workspace.workspaceFolders?.length ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
-	await vscode.workspace.getConfiguration("extendedModels").update("promptPresets", { selectedId: picked.id }, target);
+	await persistSelectedPromptPreset(context, picked.id);
 	vscode.window.showInformationMessage(picked.id ? `Copilot Bro prompt preset selected: ${picked.label}` : "Copilot Bro prompt preset disabled.");
 }
 

@@ -11,6 +11,7 @@ export class OpenAIStreamParser {
 	private readonly toolBuffers = new Map<number, ToolBuffer>();
 	private readonly completedToolIndices = new Set<number>();
 	private readonly reasoningDetailBuffers = new Map<number, string>();
+	private readonly scalarReasoningBuffers = new Map<number, string>();
 	private xmlThinkingActive = false;
 	private xmlThinkingDetectionDone = false;
 	private thinkingId: string | undefined;
@@ -148,12 +149,9 @@ export class OpenAIStreamParser {
 		}
 
 		const finishReason = typeof choice.finish_reason === "string" ? choice.finish_reason : undefined;
-		if (finishReason === "tool_calls") {
-			this.flushToolCalls(onEvent, true);
-			return true;
-		}
-		if (finishReason === "stop") {
-			this.flushToolCalls(onEvent, false);
+		if (finishReason) {
+			await onEvent({ type: "finish", reason: finishReason });
+			this.flushToolCalls(onEvent, finishReason === "tool_calls");
 			return true;
 		}
 		return false;
@@ -215,7 +213,22 @@ export class OpenAIStreamParser {
 				return text.startsWith(previous) ? text.slice(previous.length) : text;
 			}).filter(Boolean).join("");
 		}
-		return extractScalarThinkingText(choice, delta);
+		const index = typeof choice.index === "number" ? choice.index : 0;
+		const raw = extractScalarThinkingText(choice, delta);
+		if (!raw) {
+			return "";
+		}
+		const previous = this.scalarReasoningBuffers.get(index) ?? "";
+		let incremental = raw;
+		if (previous && raw.startsWith(previous)) {
+			incremental = raw.slice(previous.length);
+		} else if (previous && previous.startsWith(raw)) {
+			incremental = "";
+		}
+		if (incremental) {
+			this.scalarReasoningBuffers.set(index, previous + incremental);
+		}
+		return incremental;
 	}
 
 	private flushToolCalls(onEvent: (event: StreamEvent) => void | Promise<void>, throwOnInvalid: boolean): void {

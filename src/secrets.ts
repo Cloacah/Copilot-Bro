@@ -1,15 +1,16 @@
 import * as vscode from "vscode";
+import process from "node:process";
 import type { ModelConfig } from "./types";
+import {
+	getApiKey as getApiKeyFromStorage,
+	providerSecretKey,
+	shouldDeferApiKeyPromptInSmoke
+} from "./secretsStorage";
 
-const DEFAULT_KEY = "extendedModels.apiKey";
-
-export function providerSecretKey(provider: string): string {
-	return `extendedModels.apiKey.${provider.trim().toLowerCase()}`;
-}
+export { providerSecretKey } from "./secretsStorage";
 
 export async function getApiKey(secrets: vscode.SecretStorage, model: ModelConfig): Promise<string | undefined> {
-	const providerKey = providerSecretKey(model.provider);
-	return await secrets.get(providerKey) ?? await secrets.get(DEFAULT_KEY);
+	return getApiKeyFromStorage(secrets, model);
 }
 
 export async function promptForApiKey(
@@ -18,7 +19,7 @@ export async function promptForApiKey(
 	existing?: string
 ): Promise<string | undefined> {
 	const normalizedProvider = provider?.trim().toLowerCase();
-	const key = normalizedProvider ? providerSecretKey(normalizedProvider) : DEFAULT_KEY;
+	const key = normalizedProvider ? providerSecretKey(normalizedProvider) : "extendedModels.apiKey";
 	const title = normalizedProvider ? `API Key for ${normalizedProvider}` : "Default API Key";
 	const value = await vscode.window.showInputBox({
 		title: `Copilot Bro: ${title}`,
@@ -46,6 +47,9 @@ export async function ensureApiKey(secrets: vscode.SecretStorage, model: ModelCo
 	if (existing) {
 		return existing;
 	}
+	if (shouldDeferApiKeyPromptInSmoke()) {
+		return undefined;
+	}
 
 	const entered = await promptForApiKey(secrets, model.provider);
 	return entered || undefined;
@@ -55,12 +59,12 @@ export async function clearApiKey(secrets: vscode.SecretStorage, provider?: stri
 	if (provider?.trim()) {
 		await secrets.delete(providerSecretKey(provider));
 	} else {
-		await secrets.delete(DEFAULT_KEY);
+		await secrets.delete("extendedModels.apiKey");
 	}
 }
 
 export async function setDefaultApiKey(secrets: vscode.SecretStorage): Promise<void> {
-	const existing = await secrets.get(DEFAULT_KEY);
+	const existing = await secrets.get("extendedModels.apiKey");
 	const saved = await promptForApiKey(secrets, undefined, existing);
 	if (saved === "") {
 		vscode.window.showInformationMessage("Copilot Bro default API key cleared.");

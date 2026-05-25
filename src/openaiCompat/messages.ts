@@ -180,12 +180,18 @@ export function repairReasoningToolHistory(
 		(message.role === "assistant" && Boolean(message.tool_calls?.length))
 		|| message.role === "tool"
 	);
-	for (const message of messages) {
+	for (let index = 0; index < messages.length; index += 1) {
+		const message = messages[index];
 		if (message.role === "assistant" && message.tool_calls?.length) {
 			const repaired = cloneMessage(message);
 			const toolCalls = repaired.tool_calls ?? [];
 			for (const toolCall of toolCalls) {
 				toolCall.id = normalizeToolCallId(toolCall.id);
+			}
+			const availableToolResultIds = collectContiguousToolResultIds(messages, index + 1);
+			const retainedToolCalls = toolCalls.filter((toolCall) => availableToolResultIds.has(toolCall.id));
+			if (retainedToolCalls.length === 0) {
+				continue;
 			}
 			const reasoning = repaired.reasoning_content ?? findReasoningForToolCalls(toolCalls, lookup);
 			if (!reasoning?.trim()) {
@@ -194,9 +200,10 @@ export function repairReasoningToolHistory(
 				}
 				continue;
 			}
+			repaired.tool_calls = retainedToolCalls;
 			repaired.reasoning_content = reasoning;
 			out.push(repaired);
-			for (const toolCall of toolCalls) {
+			for (const toolCall of retainedToolCalls) {
 				seenToolCalls.add(toolCall.id);
 			}
 			continue;
@@ -228,17 +235,26 @@ export function repairReasoningToolHistory(
 					continue;
 				}
 				const repaired = cloneMessage(cachedAssistant);
-				for (const toolCall of repaired.tool_calls ?? []) {
+				const toolCalls = repaired.tool_calls ?? [];
+				for (const toolCall of toolCalls) {
 					toolCall.id = normalizeToolCallId(toolCall.id);
 				}
-				const reasoning = repaired.reasoning_content ?? findReasoningForToolCalls(repaired.tool_calls ?? [], lookup);
-				if (!reasoning?.trim()) {
-					droppedToolCalls.add(normalizedToolCallId);
+				const availableToolResultIds = collectContiguousToolResultIds(messages, index);
+				const retainedToolCalls = toolCalls.filter((toolCall) => availableToolResultIds.has(toolCall.id));
+				if (retainedToolCalls.length === 0) {
 					continue;
 				}
+				const reasoning = repaired.reasoning_content ?? findReasoningForToolCalls(toolCalls, lookup);
+				if (!reasoning?.trim()) {
+					for (const toolCall of toolCalls) {
+						droppedToolCalls.add(toolCall.id);
+					}
+					continue;
+				}
+				repaired.tool_calls = retainedToolCalls;
 				repaired.reasoning_content = reasoning;
 				out.push(repaired);
-				for (const toolCall of repaired.tool_calls ?? []) {
+				for (const toolCall of retainedToolCalls) {
 					seenToolCalls.add(toolCall.id);
 				}
 			}
@@ -250,6 +266,18 @@ export function repairReasoningToolHistory(
 	}
 
 	return out;
+}
+
+function collectContiguousToolResultIds(messages: readonly OpenAIMessage[], startIndex: number): Set<string> {
+	const ids = new Set<string>();
+	for (let index = startIndex; index < messages.length; index += 1) {
+		const message = messages[index];
+		if (message.role !== "tool" || !message.tool_call_id) {
+			break;
+		}
+		ids.add(normalizeToolCallId(message.tool_call_id));
+	}
+	return ids;
 }
 
 export function stripReasoningContent(messages: OpenAIMessage[]): OpenAIMessage[] {
@@ -434,14 +462,14 @@ function isThinkingPart(value: unknown): value is { value: string | readonly str
 	return name.includes("thinking");
 }
 
-function isImagePart(value: unknown): value is { mimeType: string; data: Uint8Array } {
+function isImagePart(value: unknown): value is { mimeType: string; data: unknown } {
 	if (!value || typeof value !== "object") {
 		return false;
 	}
 	const record = value as Record<string, unknown>;
 	return typeof record.mimeType === "string"
 		&& record.mimeType.startsWith("image/")
-		&& record.data instanceof Uint8Array;
+		&& toUint8Array(record.data) !== undefined;
 }
 
 function isToolCallPart(value: unknown): value is { callId?: string; name: string; input?: unknown } {
@@ -497,6 +525,8 @@ function collectText(content: readonly unknown[] | undefined): string {
 			text += part;
 		} else if (isTextLikePart(part)) {
 			text += extractTextValue(part);
+		} else if (isImagePart(part)) {
+			text += "[Image binary omitted from tool result text channel]";
 		} else {
 			text += safeStringify(part);
 		}
@@ -504,8 +534,29 @@ function collectText(content: readonly unknown[] | undefined): string {
 	return text;
 }
 
-function createDataUrl(part: { mimeType: string; data: Uint8Array }): string {
-	return `data:${part.mimeType};base64,${Buffer.from(part.data).toString("base64")}`;
+function createDataUrl(part: { mimeType: string; data: unknown }): string {
+	const bytes = toUint8Array(part.data);
+	if (!bytes) {
+		return "";
+	}
+	return `data:${part.mimeType};base64,${Buffer.from(bytes).toString("base64")}`;
+}
+
+function toUint8Array(value: unknown): Uint8Array | undefined {
+	if (value instanceof Uint8Array) {
+		return value;
+	}
+	if (value instanceof ArrayBuffer) {
+		return new Uint8Array(value);
+	}
+	if (ArrayBuffer.isView(value)) {
+		const view = value as ArrayBufferView;
+		return new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+	}
+	if (Array.isArray(value) && value.every((item) => Number.isInteger(item) && item >= 0 && item <= 255)) {
+		return new Uint8Array(value);
+	}
+	return undefined;
 }
 
 function safeStringify(value: unknown): string {

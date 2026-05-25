@@ -1,6 +1,35 @@
 import * as vscode from "vscode";
-import type { ExtensionSettings, LogLevel, ModelCatalogState, ModelConfig, PromptPresetSettings, RetrySettings, VisionProxySettings } from "../types";
+import type {
+	ConfigWriteScope,
+	ExtensionSettings,
+	LogLevel,
+	ModelConfig,
+	PromptPresetSettings,
+	RetrySettings,
+	RequestAttributionConfig,
+	VisionAgentConfig,
+	VisionIntegrityConfig,
+	VisionProcessingConfig,
+	VisionProxySettings,
+} from "../types";
+import {
+	DEFAULT_REQUEST_ATTRIBUTION,
+	DEFAULT_VISION_AGENT,
+	DEFAULT_VISION_INTEGRITY,
+	DEFAULT_VISION_PROCESSING,
+	getNormalizedRequestAttributionConfig as readNormalizedRequestAttributionConfig,
+	getNormalizedVisionAgentConfig as readNormalizedVisionAgentConfig,
+	getNormalizedVisionIntegrityConfig as readNormalizedVisionIntegrityConfig,
+	getNormalizedVisionProcessingConfig as readNormalizedVisionProcessingConfig
+} from "./contractConfig";
 import { BUILT_IN_PRESETS, DEFAULT_CONTEXT_LENGTH, DEFAULT_MAX_OUTPUT_TOKENS } from "./presets";
+import { enrichModelsWithProviderBaseUrl, normalizeProviderCustomBaseUrls } from "./providerBaseUrl";
+import { normalizeProviderEndpointsConfig } from "./providerEndpoints";
+export { getRuntimeModelId, isWrappedLanguageModelConfig } from "./modelIdentity";
+import { getRuntimeModelId, isWrappedLanguageModelConfig } from "./modelIdentity";
+import { createMergedSectionConfigReader, readMergedScopedRecord, readMergedScopedSection, readMergedScopedValue } from "./configScope";
+import { readMergedCustomModelsFromInspect } from "../ui/configPanelPersistence";
+import { normalizeModelFamilyCustomVersions } from "./modelFamilySettings";
 
 const DEFAULT_RETRY: RetrySettings = {
 	enabled: true,
@@ -12,47 +41,67 @@ const DEFAULT_RETRY: RetrySettings = {
 const DEFAULT_VISION_PROXY: VisionProxySettings = {
 	enabled: true,
 	defaultModelId: "",
-	prompt: "Describe the visual contents of each image in detail for a coding assistant. Include visible text, UI state, diagrams, errors, layout, colors, and any details needed to answer the user's request. Be factual and do not solve the task yourself."
+	customPrompt: ""
 };
 
 const DEFAULT_PROMPT_PRESETS: PromptPresetSettings = {
 	selectedId: ""
 };
 
-export function getSettings(catalogState?: ModelCatalogState): ExtensionSettings {
+const DEFAULT_CONFIG_WRITE_SCOPE: ConfigWriteScope = "global";
+export const MODEL_VISION_PROXY_DISABLED = "__vision_proxy_disabled__";
+
+export function getSettings(): ExtensionSettings {
+	return getFullConfig();
+}
+
+export function getFullConfig(): ExtensionSettings {
 	const config = vscode.workspace.getConfiguration("extendedModels");
+	const mergedSectionReader = createMergedSectionConfigReader(config);
 	const includeBuiltInPresets = config.get<boolean>("includeBuiltInPresets", true);
-	const defaultBaseUrl = config.get<string>("defaultBaseUrl", "");
-	const customModels = normalizeModels(config.get<unknown[]>("models", []), defaultBaseUrl);
-	const visionProxy = normalizeVisionProxy(config.get<Partial<VisionProxySettings>>("visionProxy", DEFAULT_VISION_PROXY));
-	const promptPresets = normalizePromptPresets(config.get<Partial<PromptPresetSettings>>("promptPresets", DEFAULT_PROMPT_PRESETS));
-	const retry = normalizeRetry(config.get<Partial<RetrySettings>>("retry", DEFAULT_RETRY));
+	const customModels = normalizeModels(readMergedCustomModelsFromInspect(config.inspect("models")));
+	const providerCustomBaseUrls = readMergedScopedRecord(config, "providerCustomBaseUrls", normalizeProviderCustomBaseUrls);
+	const visionProxy = normalizeVisionProxy(readMergedScopedSection(config, "visionProxy") as Partial<VisionProxySettings>);
+	const promptPresets = normalizePromptPresets(readMergedScopedSection(config, "promptPresets") as Partial<PromptPresetSettings>);
+	const retry = normalizeRetry(readMergedScopedSection(config, "retry") as Partial<RetrySettings>);
+	const visionAgent = readNormalizedVisionAgentConfig(mergedSectionReader);
+	const visionIntegrity = readNormalizedVisionIntegrityConfig(mergedSectionReader);
+	const visionProcessing = readNormalizedVisionProcessingConfig(mergedSectionReader);
+	const requestAttribution = readNormalizedRequestAttributionConfig(mergedSectionReader);
 	const requestTimeoutMs = Math.max(1000, config.get<number>("requestTimeoutMs", 120000));
 	const logLevel = config.get<LogLevel>("logLevel", "info");
 	const uiLanguage = config.get<"zh" | "en">("uiLanguage", "zh");
-	const catalogModels = catalogState ? normalizeModelConfigs(catalogState.models, defaultBaseUrl) : [];
-	const builtIns = includeBuiltInPresets ? applyCatalogState([...BUILT_IN_PRESETS], catalogModels, catalogState) : [];
-	const models = includeBuiltInPresets ? mergeModels(builtIns, customModels) : customModels;
+	const configWriteScope = normalizeConfigWriteScope(config.get<unknown>("configWriteScope", DEFAULT_CONFIG_WRITE_SCOPE));
+	const providerEndpoints = readMergedScopedRecord(config, "providerEndpoints", normalizeProviderEndpointsConfig);
+	const modelFamilyCustomVersions = readMergedScopedValue(config, "modelFamilyCustomVersions", normalizeModelFamilyCustomVersions);
+	const builtIns = includeBuiltInPresets
+		? enrichModelsWithProviderBaseUrl([...BUILT_IN_PRESETS], providerEndpoints, providerCustomBaseUrls)
+		: [];
+	const models = enrichModelsWithProviderBaseUrl(
+		includeBuiltInPresets ? mergeModels(builtIns, customModels) : customModels,
+		providerEndpoints,
+		providerCustomBaseUrls
+	);
 
 	return {
 		includeBuiltInPresets,
-		defaultBaseUrl,
+		defaultBaseUrl: "",
+		providerEndpoints,
+		providerCustomBaseUrls,
+		modelFamilyCustomVersions,
 		models,
 		visionProxy,
 		promptPresets,
 		retry,
 		requestTimeoutMs,
 		logLevel,
-		uiLanguage
+		uiLanguage,
+		configWriteScope,
+		visionAgent,
+		visionIntegrity,
+		visionProcessing,
+		requestAttribution
 	};
-}
-
-export function getRuntimeModelId(model: Pick<ModelConfig, "id" | "configId" | "provider">): string {
-	if (model.configId?.trim()) {
-		return `${model.id}::${model.configId.trim()}`;
-	}
-
-	return `${model.id}::${model.provider.trim().toLowerCase()}`;
 }
 
 export function findModelConfig(runtimeId: string, models: readonly ModelConfig[]): ModelConfig | undefined {
@@ -73,11 +122,20 @@ export function validateModelConfig(model: ModelConfig): string | undefined {
 	if (!model.provider.trim()) {
 		return `Provider is required for model ${model.id}.`;
 	}
+	if (isWrappedLanguageModelConfig(model)) {
+		if (model.maxOutputTokens < 1) {
+			return `maxOutputTokens for model ${model.id} must be greater than zero.`;
+		}
+		if (model.contextLength <= model.maxOutputTokens) {
+			return `contextLength for model ${model.id} must be greater than maxOutputTokens.`;
+		}
+		return undefined;
+	}
 	if (!model.baseUrl?.trim()) {
-		return `Base URL is required for model ${model.id}.`;
+		return `Provider ${model.provider} has no base URL. Set the provider gateway in model settings.`;
 	}
 	if (!/^https?:\/\//i.test(model.baseUrl)) {
-		return `Base URL for model ${model.id} must start with http:// or https://.`;
+		return `Base URL for provider ${model.provider} must start with http:// or https://.`;
 	}
 	if (model.maxOutputTokens < 1) {
 		return `maxOutputTokens for model ${model.id} must be greater than zero.`;
@@ -104,27 +162,6 @@ export function mergeModels(builtIn: ModelConfig[], custom: ModelConfig[]): Mode
 	return Array.from(out.values());
 }
 
-function applyCatalogState(builtIn: ModelConfig[], catalogModels: ModelConfig[], catalogState?: ModelCatalogState): ModelConfig[] {
-	if (!catalogState || catalogModels.length === 0) {
-		return builtIn;
-	}
-
-	const refreshedProviders = new Set(catalogState.refreshedProviders.map((provider) => provider.trim().toLowerCase()).filter(Boolean));
-	if (refreshedProviders.size === 0) {
-		return builtIn;
-	}
-
-	const retainedBuiltIns = builtIn.filter((model) => !refreshedProviders.has(model.provider.trim().toLowerCase()));
-	return [
-		...retainedBuiltIns,
-		...catalogModels
-	];
-}
-
-function normalizeModelConfigs(models: readonly ModelConfig[] | undefined, defaultBaseUrl: string): ModelConfig[] {
-	return normalizeModels(models as unknown[] | undefined, defaultBaseUrl);
-}
-
 function normalizeRetry(input: Partial<RetrySettings> | undefined): RetrySettings {
 	return {
 		enabled: input?.enabled ?? DEFAULT_RETRY.enabled,
@@ -134,7 +171,7 @@ function normalizeRetry(input: Partial<RetrySettings> | undefined): RetrySetting
 	};
 }
 
-function normalizeModels(input: unknown[] | undefined, defaultBaseUrl: string): ModelConfig[] {
+function normalizeModels(input: unknown[] | undefined): ModelConfig[] {
 	if (!Array.isArray(input)) {
 		return [];
 	}
@@ -154,17 +191,17 @@ function normalizeModels(input: unknown[] | undefined, defaultBaseUrl: string): 
 		models.push({
 			id,
 			displayName: asString(record.displayName) || undefined,
+			modelFamilyKey: asString(record.modelFamilyKey) || undefined,
 			configId: asString(record.configId) || undefined,
 			provider,
 			providerDisplayName: asString(record.providerDisplayName) || undefined,
 			category: asString(record.category) || undefined,
-			baseUrl: asString(record.baseUrl) || defaultBaseUrl || undefined,
 			family: asString(record.family) || "oai-compatible",
 			contextLength: asPositiveNumber(record.contextLength, DEFAULT_CONTEXT_LENGTH),
 			maxOutputTokens: asPositiveNumber(record.maxOutputTokens ?? record.max_tokens, DEFAULT_MAX_OUTPUT_TOKENS),
 			maxCompletionTokens: asOptionalPositiveNumber(record.maxCompletionTokens ?? record.max_completion_tokens),
 			vision: asBoolean(record.vision, false),
-			visionProxyModelId: asOptionalNullableString(record.visionProxyModelId ?? record.vision_proxy_model_id),
+			visionProxyModelId: normalizeModelVisionProxyValue(record.visionProxyModelId ?? record.vision_proxy_model_id),
 			toolCalling: asBoolean(record.toolCalling, true),
 			temperature: asNullableNumber(record.temperature),
 			topP: asNullableNumber(record.topP ?? record.top_p),
@@ -175,7 +212,11 @@ function normalizeModels(input: unknown[] | undefined, defaultBaseUrl: string): 
 			includeReasoningInRequest: asBoolean(record.includeReasoningInRequest ?? record.include_reasoning_in_request, false),
 			editTools: normalizeStringArray(record.editTools),
 			parameterHints: normalizeObject(record.parameterHints) as ModelConfig["parameterHints"],
-			documentationUrl: asString(record.documentationUrl) || undefined
+			documentationUrl: asString(record.documentationUrl) || undefined,
+			modelSource: asString(record.modelSource) === "vscode-lm-wrapper" ? "vscode-lm-wrapper" : undefined,
+			wrappedLanguageModelId: asString(record.wrappedLanguageModelId ?? record.hostModelId ?? record.vscodeLmModelId) || undefined,
+			wrappedLanguageModelVendor: asString(record.wrappedLanguageModelVendor ?? record.hostModelVendor ?? record.vscodeLmVendor) || undefined,
+			wrappedLanguageModelFamily: asString(record.wrappedLanguageModelFamily ?? record.hostModelFamily ?? record.vscodeLmFamily) || undefined
 		});
 	}
 	return models;
@@ -185,7 +226,8 @@ function normalizeVisionProxy(input: Partial<VisionProxySettings> | undefined): 
 	return {
 		enabled: input?.enabled ?? DEFAULT_VISION_PROXY.enabled,
 		defaultModelId: asString(input?.defaultModelId) || DEFAULT_VISION_PROXY.defaultModelId,
-		prompt: asString(input?.prompt) || DEFAULT_VISION_PROXY.prompt
+		// Support both new (customPrompt) and old (prompt) field names for backward compatibility
+		customPrompt: asString(input?.customPrompt) || asString((input as any)?.prompt) || DEFAULT_VISION_PROXY.customPrompt
 	};
 }
 
@@ -193,6 +235,22 @@ function normalizePromptPresets(input: Partial<PromptPresetSettings> | undefined
 	return {
 		selectedId: asString(input?.selectedId) || DEFAULT_PROMPT_PRESETS.selectedId
 	};
+}
+
+export function getNormalizedVisionAgentConfig(config = vscode.workspace.getConfiguration("extendedModels")): VisionAgentConfig {
+	return readNormalizedVisionAgentConfig(createMergedSectionConfigReader(config));
+}
+
+export function getNormalizedVisionIntegrityConfig(config = vscode.workspace.getConfiguration("extendedModels")): VisionIntegrityConfig {
+	return readNormalizedVisionIntegrityConfig(createMergedSectionConfigReader(config));
+}
+
+export function getNormalizedVisionProcessingConfig(config = vscode.workspace.getConfiguration("extendedModels")): VisionProcessingConfig {
+	return readNormalizedVisionProcessingConfig(createMergedSectionConfigReader(config));
+}
+
+export function getNormalizedRequestAttributionConfig(config = vscode.workspace.getConfiguration("extendedModels")): RequestAttributionConfig {
+	return readNormalizedRequestAttributionConfig(createMergedSectionConfigReader(config));
 }
 
 function normalizeThinking(value: unknown): { type?: "enabled" | "disabled" } | undefined {
@@ -255,12 +313,28 @@ function asString(value: unknown): string {
 	return typeof value === "string" ? value.trim() : "";
 }
 
-function asOptionalNullableString(value: unknown): string | null | undefined {
+function normalizeModelVisionProxyValue(value: unknown): string | null | undefined {
 	if (value === null) {
 		return null;
 	}
 	const text = asString(value);
-	return text ? text : undefined;
+	if (!text) {
+		return undefined;
+	}
+	if (text === MODEL_VISION_PROXY_DISABLED || text.toLowerCase() === "null") {
+		return null;
+	}
+	return text;
+}
+
+function normalizeConfigWriteScope(value: unknown): ConfigWriteScope {
+	if (value === "global") {
+		return "global";
+	}
+	if (value === "workspace" || value === "auto") {
+		return "workspace";
+	}
+	return DEFAULT_CONFIG_WRITE_SCOPE;
 }
 
 function asBoolean(value: unknown, fallback: boolean): boolean {
