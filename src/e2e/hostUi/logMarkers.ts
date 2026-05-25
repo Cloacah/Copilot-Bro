@@ -105,7 +105,7 @@ export const CHAT_INTEGRATION_SCENARIO_EXTRA_MARKERS: Readonly<Record<string, re
 	"native-vision-zhipu-chat": [
 		LogMarkerSnippet.strategyNative,
 		VisionLogEvent.nativeStructuredResolving,
-		VisionLogEvent.nativeStructuredCompleted,
+		VisionLogEvent.nativeStructuredPass,
 		LogMarkerSnippet.hasImagePartsFalse
 	],
 	"multi-provider-switch-context": [VisionLogEvent.inputBound, ProviderLogEvent.requestEnd]

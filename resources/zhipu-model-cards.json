@@ -188,6 +188,16 @@
       "thinking": "disabled"
     },
     {
+      "familyKey": "glm-4.6v-flashx",
+      "displayName": "GLM 4.6V FlashX",
+      "category": "Vision / Agent Coding",
+      "kind": "vision",
+      "contextLength": 128000,
+      "maxOutputTokens": 32768,
+      "defaultVersionHint": "glm-4.6v-flashx",
+      "thinking": "enabled"
+    },
+    {
       "familyKey": "glm-4.6v-flash",
       "displayName": "GLM 4.6V Flash",
       "category": "Free / Vision",

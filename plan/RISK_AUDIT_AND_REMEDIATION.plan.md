@@ -9,7 +9,7 @@ auditScope:
 
 # 风险审计与修复计划（只读审计产物）
 
-> **约束**：本文件为审计与修复跟踪。阶段 A–F 主体已完成（见 §8）。**R-P2-01**（extension 动态拆 smoke bundle）仍为可选大改。
+> **约束**：本文件为审计与修复跟踪。阶段 A–F 已完成（见 §8）。Release `extension.js` 通过动态 `import("./e2e/hostUi/extensionSmokeActivation")` 加载 smoke，无静态 `require` e2e 树。
 
 ## 8. 实施状态（2026-05-26）
 
@@ -20,9 +20,11 @@ auditScope:
 | C Host UI | ✅ | 可执行 turn 计数；budget 候选封顶 4；p5 `native-vision`；log-watch/validator 对齐；consistency 用 scenario 行锚点 |
 | D 识图重试 | ✅ | `retry.enabled` 关闭格式环与结构化 HTTP 重试 |
 | E 单测/CI | ✅ | `catalog:verify`（离线）、`verify:ci`、`secretsStorage` / `visionStructuredRetryPolicy` / `providerErrorSurface` |
-| F Release 剔 e2e | ✅ | Release VSIX 拒 `out/e2e/**`；`smokeModeGate` 抽离 smoke 门闩 |
+| F Release 剔 e2e | ✅ | VSIX 拒 `out/e2e/**`；`extensionSmokeActivation` 动态加载；`smokeModeGate` |
 
-**R-P0-01～03**：已修复。**R-P1-01～06、09**：已修复。**R-P1-07**：UI + checklist 澄清 `retryOnFailure` 仅 agentSession 批次。**R-P1-08**：已缓解。**R-P2-01**：部分（VSIX 无 `out/e2e` 树；`extension.ts` 仍静态 import smoke 实现）。**R-P2-02**：部分（`providerErrorSurface` + pipeline；无 `provider.ts` 类级单测）。**R-P2-05**：consistency 场景锚点修复。**R-P2-07**：`catalog:verify` + `verify:ci`。**R-P2-09**：`smokePrompt.ts` SSOT。**R-P2-11**：`visionLogReplay` cache-hit 后禁止 `request.start`。**R-P2-12**：`docs/vision-route-order.md` + `visionRoutePipeline.ts`。**R-P2-03/04/06/08**：保留为设计权衡或低优先级。
+**R-P0-01～03**：已修复。**R-P1-01～06、09**：已修复。**R-P1-07**：UI + checklist 澄清 `retryOnFailure` 仅 agentSession 批次。**R-P1-08**：已缓解。**R-P2-01**：已修复（无静态 e2e require；test VSIX 仍含 `out/e2e/**`）。**R-P2-02**：已缓解（`providerErrorSurface` / `providerOrchestration` / `validateModelConfig` 经 settings 单测；`ExtendedModelsProvider` 仍依赖 VS Code 实机）。**R-P2-05～07、09～12**：已修复。**R-P2-03/04/06/08**：保留为设计权衡（Proxy HTTP 对称、Kimi catalog 生成器、未挂 npm 的 dev 脚本）。
+
+**2026-05-26**：Host UI stream 阶段 429/1305 重试 + `zhipu.vision-native` 付费回退；`verify-release-vsix` 与动态 smoke 对齐；catalog README + `glm-4.6v-flashx`；实机 acceptance **passed**。
 
 ## 0. 审计方法与记忆汇总规则
 
@@ -54,7 +56,7 @@ auditScope:
 | `src/config/settings.ts` | ✅ 已审 | 生产 DEFAULT_RETRY 3×1s（已恢复） |
 | `src/visionStructuredPass.ts` | ✅ 已审 | 格式环不看 `retry.enabled`；可与 HTTP 重试相乘 |
 | `src/agentSession/retryStrategy.ts` | ✅ 已审 | `retryOnFailure` 仅测试引用 |
-| `src/extension.ts` | ✅ 已审 | 生产入口 import 全量 `e2e/hostUi` |
+| `src/extension.ts` | ✅ 已审 | 生产入口无静态 `e2e`；smoke 时动态 `extensionSmokeActivation` |
 | `package.json` | ✅ 已审 | `release:vsix` 路径断裂；`install:vscode` 0.1.6 |
 | `resources/host-ui-model-profiles.json` | ✅ 已审 | 有 `hostUiModelProfiles.test.ts` 守护 |
 | `plan/` 目录 | ✅ 已审 | **整目录 `.gitignore`** vs `planCoverageAudit` 要求存在 |
@@ -309,7 +311,7 @@ auditScope:
 ## 5. 诚实声明与未覆盖范围
 
 1. **未对 308 个文件逐行人工审阅**；采用分域代理 + 主路径复验；`toolCooperation` 下未测文件仅列目录级风险。
-2. **Host UI 实机**结果随 API 限流波动；审计日曾出现 1305/stall，修复后须再跑 acceptance 确认。
+2. **Host UI 实机**结果随 API 限流波动；1305 在 stream 阶段曾绕过 `integrationRetry`（已修）；付费 `glm-4.6v` / `glm-4.6v-flashx` 已入 `zhipu.vision-native` 回退链。
 3. 本计划 **不保证** 按阶段执行后零风险；P1/P2 中部分项为设计权衡（如 benchmark 不进 default），需产品确认而非纯 bugfix。
 4. 执行修复时 **不得** 以“单测绿”替代 Host UI 实机（对 e2e 行为变更）。
 

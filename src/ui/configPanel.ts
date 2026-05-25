@@ -28,6 +28,7 @@ import {
 import { modelFamilySettingsKey } from "../config/modelFamilyCatalog";
 import { normalizeProviderCustomBaseUrls, stripBaseUrlFromModelRecord } from "../config/providerBaseUrl";
 import { getSettings, MODEL_VISION_PROXY_DISABLED } from "../config/settings";
+import { isHostUiSmokeMode } from "../smokeModeGate";
 import { getRuntimeModelId, listProviders } from "../config/settings";
 import { getSelectedPromptPresetId, listPromptPresets } from "../promptPresets";
 import { providerSecretKey } from "../secrets";
@@ -343,10 +344,6 @@ export class ConfigPanel {
 			resolveHostUiSmokeResult = undefined;
 		}
 	}
-}
-
-function isHostUiSmokeMode(): boolean {
-	return process.env.COPILOT_BRO_UI_SMOKE === "1";
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {

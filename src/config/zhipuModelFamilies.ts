@@ -191,6 +191,21 @@ export const ZHIPU_MODEL_FAMILIES: readonly ModelFamilyDefinition[] = [
 		"thinking": "disabled"
 	},
 	{
+		"familyKey": "glm-4.6v-flashx",
+		"displayName": "GLM 4.6V FlashX",
+		"category": "Vision / Agent Coding",
+		"defaultVersionId": "glm-4.6v-flashx",
+		"versionIds": [
+			"glm-4.6v-flashx"
+		],
+		"vision": true,
+		"temperature": 0.6,
+		"topP": 1,
+		"contextLength": 128000,
+		"maxOutputTokens": 32768,
+		"thinking": "enabled"
+	},
+	{
 		"familyKey": "glm-4.1v-thinking",
 		"displayName": "GLM 4.1V Thinking",
 		"category": "Vision / Reasoning",

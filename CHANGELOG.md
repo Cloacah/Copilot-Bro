@@ -10,7 +10,7 @@ All notable changes to this project are documented here.
 - **Code structure** — split extension smoke/runtime modules, vision structured-pass routing, smoke log bridge, and `scripts/` / `tsconfig` layout per `plan/CODE_STRUCTURE_OPTIMIZATION.plan.md` (P1–P3 closed).
 - **Host UI** — default chat acceptance runs **16** integration scenarios (canonical 17; `p7-chat-benchmark-web-restore` opt-in); stall gate uses executable turns; `p5-qwen-vl-native-chat` uses `native-vision` kind; log evidence validator aligns with live log-watch on `ok:false`.
 - **Vision retry** — structured vision pass honors `retry.enabled` (format loop + HTTP attempts).
-- **Release VSIX** — `.vscodeignore` excludes all `out/e2e/**` outputs (smoke still in `extension.js` when env-gated).
+- **Release VSIX** — `.vscodeignore` excludes all `out/e2e/**`; smoke loads via dynamic `import` of `extensionSmokeActivation` only when `COPILOT_BRO_UI_SMOKE=1` (no static e2e bundle in `extension.js`).
 - **npm scripts** — `release:vsix` path fix; `install:vscode` targets 0.2.0; `plan/` tracked in git.
 
 ### Added
@@ -18,6 +18,13 @@ All notable changes to this project are documented here.
 - Host UI chat acceptance (`npm run test:host-ui:chat-acceptance`, 16 default / 17 canonical) and README generation workflow (`npm run readme:generate` / `readme:check`).
 - `npm run catalog:verify` — fails when committed Qwen/Zhipu catalog artifacts drift after rebuild.
 - Unit tests for `secretsStorage`, `visionStructuredRetryPolicy`, and release VSIX `out/e2e/**` deny policy.
+- Zhipu **GLM-4.6V FlashX** catalog family; `scripts/catalog/README.md` documents offline + live (`ZHIPU_API_KEY`) regeneration.
+
+### Fixed
+
+- Host UI integration retry now covers **stream-phase** provider errors (429/1305) and advances through `zhipu.vision-native` paid fallbacks (`glm-4.6v-flashx`, `glm-4.6v`).
+- `verify-release-vsix.mjs` aligned with dynamic smoke activation (no static `e2e/hostUi/env` require).
+- `configPanel` reuses `smokeModeGate` for smoke detection.
 
 ## [0.1.8] - 2026-05-09
 

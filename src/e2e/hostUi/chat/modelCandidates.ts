@@ -16,9 +16,9 @@ export {
 
 /** Host UI integration only — conservative defaults to limit API/token spend. */
 export const HOST_UI_INTEGRATION_RETRY_DEFAULTS = {
-	maxAttemptsPerCandidate: 2,
-	baseDelayMs: 1_500,
-	maxDelayMs: 15_000
+	maxAttemptsPerCandidate: 3,
+	baseDelayMs: 2_000,
+	maxDelayMs: 30_000
 } as const;
 
 export interface HostUiIntegrationRetryOptions {

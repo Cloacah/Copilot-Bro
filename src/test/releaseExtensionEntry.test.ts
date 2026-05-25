@@ -5,10 +5,12 @@ import path from "node:path";
 
 const root = process.cwd();
 
-test("release extension entry imports hostUi env from packaged hostUi tree not driver", () => {
+test("release extension entry does not statically bundle e2e hostUi modules", () => {
 	const extensionJs = readFileSync(path.join(root, "out/extension.js"), "utf8");
-	assert.match(extensionJs, /e2e\/hostUi\/env/u);
+	const staticE2eRequires = [...extensionJs.matchAll(/require\("\.\/e2e\/hostUi\/[^"]+"\)/gu)].map((match) => match[0]);
+	assert.deepEqual(staticE2eRequires, [], `unexpected static e2e requires: ${staticE2eRequires.join(", ")}`);
 	assert.doesNotMatch(extensionJs, /e2e\/driver\/hostUiSmokeEnv/u);
+	assert.match(extensionJs, /extensionSmokeActivation/u);
 });
 
 test("release vscodeignore excludes all compiled e2e outputs", () => {

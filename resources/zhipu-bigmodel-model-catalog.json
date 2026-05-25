@@ -1,12 +1,12 @@
 {
   "source": "bigmodel-docs-model-overview",
   "docsUrl": "https://docs.bigmodel.cn/cn/guide/start/model-overview",
-  "cardCount": 24,
+  "cardCount": 25,
   "apiSource": "zhipu-paas-v4-models",
-  "apiFetchedAt": "2026-05-25T02:31:20.641Z",
+  "apiFetchedAt": "2026-05-25T06:47:59.875Z",
   "apiModelCount": 7,
-  "familyCount": 24,
-  "modelCount": 27,
+  "familyCount": 25,
+  "modelCount": 28,
   "grouping": "bigmodel-model-card",
   "families": [
     {
@@ -192,6 +192,21 @@
       "contextLength": 128000,
       "maxOutputTokens": 32768,
       "thinking": "disabled"
+    },
+    {
+      "familyKey": "glm-4.6v-flashx",
+      "displayName": "GLM 4.6V FlashX",
+      "category": "Vision / Agent Coding",
+      "defaultVersionId": "glm-4.6v-flashx",
+      "versionIds": [
+        "glm-4.6v-flashx"
+      ],
+      "vision": true,
+      "temperature": 0.6,
+      "topP": 1,
+      "contextLength": 128000,
+      "maxOutputTokens": 32768,
+      "thinking": "enabled"
     },
     {
       "familyKey": "glm-4.1v-thinking",

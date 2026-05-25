@@ -27,7 +27,7 @@ export const CHAT_INTEGRATION_SCENARIO_PLAN_PHASES: Readonly<Record<string, read
 	"p4-self-refer-proxy-chat": ["p4"],
 	"p4-wrapped-vision-chat": ["p4"],
 	"provider-token-smoke-chat": ["p5"],
-	"native-vision-zhipu-chat": ["p5", "p6"],
+	"native-vision-zhipu-chat": ["p5"],
 	"multi-provider-switch-context": ["p3", "p5"],
 	"tool-call-model-chat": ["p5"]
 } as const;

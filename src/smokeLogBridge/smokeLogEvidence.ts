@@ -43,13 +43,22 @@ export function joinLogEvidence(lines: readonly string[]): string {
 export function findMissingLogMarkers(
 	lines: readonly string[],
 	required: readonly string[],
-	forbidden: readonly string[] = []
+	forbidden: readonly string[] = [],
+	requiredAnyOf: readonly (readonly string[])[] = []
 ): { missing: string[]; forbiddenHit: string[] } {
 	const joined = joinLogEvidence(lines);
 	const missing: string[] = [];
 	for (const marker of required) {
 		if (!joined.includes(marker)) {
 			missing.push(marker);
+		}
+	}
+	if (requiredAnyOf.length > 0) {
+		const anyGroupSatisfied = requiredAnyOf.some((group) => group.every((marker) => joined.includes(marker)));
+		if (!anyGroupSatisfied) {
+			missing.push(
+				`anyOf(${requiredAnyOf.map((group) => group.join(" + ")).join(" | ")})`
+			);
 		}
 	}
 	const forbiddenHit: string[] = [];

@@ -5,7 +5,7 @@
 import { Buffer } from "node:buffer";
 import { QWEN_HOST_UI_CONTRACT } from "../../../config/qwenCatalogContract";
 import { resolveIntegrationTurnCandidates, type HostUiModelProfileId } from "./hostUiModelProfiles";
-import { resolveHostUiTestRetryOptions } from "./modelCandidates";
+import { HOST_UI_INTEGRATION_RETRY_DEFAULTS, resolveHostUiTestRetryOptions } from "./modelCandidates";
 import {
 	HOST_UI_SMOKE_CHAT_ACCEPTANCE_DEFAULT_IDS,
 	HOST_UI_SMOKE_CHAT_MOCK_SAFE_IDS
@@ -88,6 +88,8 @@ export interface HostUiSmokeChatIntegrationScenario {
 	readonly runtimeModelCandidates?: readonly string[];
 	readonly expectedTrimmed?: string;
 	readonly requiredLogMarkers: readonly string[];
+	/** Each inner array is an AND group; at least one group must be fully satisfied. */
+	readonly requiredLogMarkersAnyOf?: readonly (readonly string[])[];
 	readonly forbiddenLogMarkers?: readonly string[];
 	readonly turns?: readonly HostUiSmokeChatIntegrationTurn[];
 	/** Per-turn LM timeout for long vision+restore runs (e.g. full screenshot → web). */
@@ -357,12 +359,16 @@ export const HOST_UI_SMOKE_CHAT_INTEGRATION_CANONICAL: readonly HostUiSmokeChatI
 			"vision.route.selected",
 			'"strategy":"native"',
 			"vision.native.structured.resolving",
-			"vision.native.structured.completed",
+			"vision.native.structured.pass",
 			"vision.input.bound",
-			"vision.evidence.persisted",
 			'"hasImageParts":false',
 			"request.start",
 			"request.end"
+		],
+		/** After 429/1305, provider may log `structured.pass` without `completed` / `evidence.persisted`. */
+		requiredLogMarkersAnyOf: [
+			["vision.native.structured.completed", "vision.evidence.persisted"],
+			["vision.native.structured.pass"]
 		],
 		forbiddenLogMarkers: ['"rawImageForwarded":true'],
 		requiredApiKeyProvider: "zhipu"
@@ -480,7 +486,7 @@ export function countIntegrationLmRequestBudget(
 	env: Pick<NodeJS.ProcessEnv, string> = process.env
 ): number {
 	const retry = resolveHostUiTestRetryOptions(env);
-	const attemptsCap = Math.min(retry.maxAttemptsPerCandidate ?? 2, 2);
+	const attemptsCap = Math.min(retry.maxAttemptsPerCandidate ?? HOST_UI_INTEGRATION_RETRY_DEFAULTS.maxAttemptsPerCandidate, 4);
 	let total = 0;
 	for (const scenario of scenarios) {
 		const turns = scenario.turns?.length ? scenario.turns : [scenario];

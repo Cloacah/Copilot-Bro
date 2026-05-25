@@ -527,7 +527,8 @@ async function runHostUiSmokeIntegrationTurn(
 			message,
 			runtimeModelId: options.runtimeModelId,
 			modelProfile: options.modelProfile,
-			attempt: options.attempt
+			attempt: options.attempt,
+			phase: "sendRequest"
 		});
 		return { ok: false, message };
 	} finally {
@@ -538,11 +539,23 @@ async function runHostUiSmokeIntegrationTurn(
 		turnToken.dispose();
 	}
 	let responseText = "";
-	for await (const part of lmResponse.stream) {
-		if (part instanceof vscode.LanguageModelTextPart) {
-			responseText += part.value;
-			response.markdown(part.value);
+	try {
+		for await (const part of lmResponse.stream) {
+			if (part instanceof vscode.LanguageModelTextPart) {
+				responseText += part.value;
+				response.markdown(part.value);
+			}
 		}
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		extensionSmokeLogger()?.info("host-ui-smoke.chat.integration.turn.attempt-failed", {
+			message,
+			runtimeModelId: options.runtimeModelId,
+			modelProfile: options.modelProfile,
+			attempt: options.attempt,
+			phase: "stream"
+		});
+		return { ok: false, message };
 	}
 	const normalizedText = turn.expectedTrimmed
 		? normalizeHostUiSmokeScenarioResponse(responseText, "baseline")
@@ -741,7 +754,8 @@ async function runHostUiSmokeChatIntegrationLoop(
 		const { missing, forbiddenHit } = findMissingLogMarkers(
 			evidenceLines,
 			scenario.requiredLogMarkers,
-			scenario.forbiddenLogMarkers ?? []
+			scenario.forbiddenLogMarkers ?? [],
+			scenario.requiredLogMarkersAnyOf ?? []
 		);
 		if (missing.length > 0 || forbiddenHit.length > 0) {
 			const message = `Integration scenario ${scenario.id} log evidence incomplete: missing=[${missing.join(", ")}] forbidden=[${forbiddenHit.join(", ")}]`;

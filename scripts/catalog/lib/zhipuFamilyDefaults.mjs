@@ -30,7 +30,7 @@ export function shouldEnableZhipuThinking(card, familyKey) {
 	if (/^glm-(5\.1|5-turbo|5|4\.7|4\.6|4\.5-air|4\.5)$/.test(familyKey)) {
 		return true;
 	}
-	if (familyKey === "glm-4.7-flash" || familyKey === "glm-4.5-flash" || familyKey === "glm-4.6v-flash") {
+	if (familyKey === "glm-4.7-flash" || familyKey === "glm-4.5-flash" || familyKey === "glm-4.6v-flash" || familyKey === "glm-4.6v-flashx") {
 		return true;
 	}
 	return false;

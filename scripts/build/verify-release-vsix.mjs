@@ -195,8 +195,12 @@ function assertWorkspaceExtensionEntry() {
 	if (/e2e\/driver\/hostUiSmokeEnv/u.test(text)) {
 		fail("out/extension.js still requires e2e/driver/hostUiSmokeEnv");
 	}
-	if (!/e2e\/hostUi\/env/u.test(text)) {
-		fail("out/extension.js must require e2e/hostUi/env");
+	const staticE2eRequires = [...text.matchAll(/require\("\.\/e2e\/hostUi\/[^"]+"\)/gu)].map((match) => match[0]);
+	if (staticE2eRequires.length > 0) {
+		fail(`out/extension.js statically requires e2e hostUi: ${staticE2eRequires.join(", ")}`);
+	}
+	if (!/extensionSmokeActivation/u.test(text)) {
+		fail("out/extension.js must dynamically load extensionSmokeActivation when smoke mode is enabled");
 	}
 }
 

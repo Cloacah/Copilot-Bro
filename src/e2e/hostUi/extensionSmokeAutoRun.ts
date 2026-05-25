@@ -2,10 +2,9 @@ import * as vscode from "vscode";
 import { HostUiSmokeLogEvent } from "../../visionProtocol/hostUiSmokeLogEvents";
 import { extensionSmokeLogger } from "./extensionSmokeLogger";
 import { hostUiSmokeAutomationLogHasEvent, readHostUiSmokeAutomationLogText } from "./smokeLogIo";
+import { delay } from "./delay";
 
-export async function delay(ms: number): Promise<void> {
-	await new Promise((resolve) => setTimeout(resolve, ms));
-}
+export { delay };
 
 /** After driver GitHub login preflight, open chat + submit without relying on the command palette. */
 export async function maybeAutoRunHostUiSmokeChatSuiteAfterGithubPreflight(

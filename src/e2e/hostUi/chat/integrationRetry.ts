@@ -7,7 +7,7 @@ import {
 	shouldAdvanceHostUiModelCandidate
 } from "../../../providerTransientErrors";
 import { extensionSmokeLogger } from "../extensionSmokeLogger";
-import { delay } from "../extensionSmokeAutoRun";
+import { delay } from "../delay";
 import {
 	HOST_UI_INTEGRATION_RETRY_DEFAULTS,
 	resolveHostUiTestRetryOptions,
@@ -59,7 +59,15 @@ export async function runHostUiIntegrationTurnWithModelFallback(
 
 		for (let attempt = 1; attempt <= maxAttemptsPerCandidate; attempt += 1) {
 			totalAttempts += 1;
-			const outcome = await runTurn(match, { runtimeModelId, attempt, candidateIndex });
+			let outcome: Awaited<ReturnType<HostUiIntegrationTurnRunner>>;
+			try {
+				outcome = await runTurn(match, { runtimeModelId, attempt, candidateIndex });
+			} catch (error) {
+				outcome = {
+					ok: false,
+					message: error instanceof Error ? error.message : String(error)
+				};
+			}
 			if (outcome.ok) {
 				extensionSmokeLogger()?.info("host-ui-smoke.chat.integration.turn.success", {
 					runtimeModelId,
@@ -82,10 +90,10 @@ export async function runHostUiIntegrationTurnWithModelFallback(
 			const canRetrySame = isTransientProviderFailure(errorLike) && attempt < maxAttemptsPerCandidate;
 			if (canRetrySame) {
 				const businessCode = extractBusinessCodeFromMessage(lastMessage);
-				const rateLimited = businessCode === "1305" || businessCode === "1308" || businessCode === "1312";
+				const rateLimited = businessCode === "1302" || businessCode === "1305" || businessCode === "1308" || businessCode === "1312";
 				const delayMs = Math.max(
 					computeProviderRetryDelayMs(attempt, baseDelayMs, maxDelayMs),
-					rateLimited ? 4_000 : 0
+					rateLimited ? 8_000 : 0
 				);
 				extensionSmokeLogger()?.info("host-ui-smoke.chat.integration.turn.retry", {
 					runtimeModelId,

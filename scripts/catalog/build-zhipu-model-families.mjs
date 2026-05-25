@@ -27,6 +27,7 @@ const ASSIGNMENT_RULES = [
 	[/^glm-4\.7-flash(?!x)/i, "glm-4.7-flash"],
 	[/^glm-4\.7-flashx/i, "glm-4.7-flashx"],
 	[/^glm-4\.7/, "glm-4.7"],
+	[/^glm-4\.6v-flashx/i, "glm-4.6v-flashx"],
 	[/^glm-4\.6v-flash/i, "glm-4.6v-flash"],
 	[/^glm-4\.6v/, "glm-4.6v"],
 	[/^glm-4\.6/, "glm-4.6"],

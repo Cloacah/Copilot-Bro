@@ -25,6 +25,8 @@ export const HOST_UI_MODEL_PROFILE_REGISTRY = {
 	],
 	"zhipu.vision-native": [
 		"glm-4.6v-flash::zhipu",
+		"glm-4.6v-flashx::zhipu",
+		"glm-4.6v::zhipu",
 		"glm-4.1v-thinking::zhipu",
 		"glm-4v-flash::zhipu",
 		"glm-5v-turbo::zhipu"

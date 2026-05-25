@@ -25,6 +25,7 @@ const REQUIRED_PATHS = [
 	"src/e2e/hostUi/registerSmokeCommands.ts",
 	"src/e2e/hostUi/extensionSmokeRuntime.ts",
 	"src/e2e/hostUi/extensionSmokeChat.ts",
+	"src/e2e/hostUi/extensionSmokeActivation.ts",
 	"src/visionOrchestrationContext.ts",
 	"src/toolCooperation/visionArtifactStore.ts",
 	"src/toolCooperation/rasterVectorizer.ts",

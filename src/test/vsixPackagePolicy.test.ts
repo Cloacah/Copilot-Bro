@@ -51,6 +51,8 @@ test("VSIX listing policy: test VSIX allows out/e2e/driver but release denies al
 	assert.throws(() => assertDenyAbsent(releaseListing, denyRelease, "release VSIX"));
 	const releaseHostUi = ["extension/out/e2e/hostUi/env.js", "extension/out/extension.js"].join("\n");
 	assert.throws(() => assertDenyAbsent(releaseHostUi, denyRelease, "release VSIX"));
+	const releaseActivation = ["extension/out/e2e/hostUi/extensionSmokeActivation.js"].join("\n");
+	assert.throws(() => assertDenyAbsent(releaseActivation, denyRelease, "release VSIX"));
 });
 
 test("VSIX listing policy: both flavors forbid /extension/src/ and analysis marker filename", () => {
