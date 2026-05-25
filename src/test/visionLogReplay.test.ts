@@ -6,6 +6,16 @@ import {
 	validateVisionCacheMissEvidenceContract
 } from "../visionProtocol/visionLogReplay";
 
+test("vision log replay: cache hit rejects request.start after cache.hit (P7 replay)", () => {
+	const log = [
+		'vision.input.bound {"evidenceId":"ev-replay"}',
+		'vision.proxy.cache.hit {"evidenceId":"ev-replay"}',
+		'[INFO] request.start {"model":"deepseek"}'
+	].join("\n");
+	const missing = validateVisionCacheHitEvidenceContract(parseVisionLogReplay(log));
+	assert.ok(missing.some((item) => item.includes("no-request-start-after-cache-hit")));
+});
+
 test("vision log replay: cache hit reuses evidence without raw image on main request", () => {
 	const log = [
 		'[INFO] vision.input.bound {"sourceKind":"screenshot","imageHashPrefix":"a1b2","evidenceId":"ev-1","route":"proxy"}',

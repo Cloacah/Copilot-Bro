@@ -2,10 +2,8 @@ import * as vscode from "vscode";
 import process from "node:process";
 import { getProviderEnvironmentVariableName, HOST_UI_SMOKE_API_KEY_PROVIDERS } from "./e2e/hostUi/env";
 import { findModelConfig, getRuntimeModelId, getSettings, listProviders } from "./config/settings";
-import {
-	isHostUiSmokeMode,
-	registerHostUiSmokeCommands
-} from "./e2e/hostUi/registerSmokeCommands";
+import { isHostUiSmokeMode } from "./smokeModeGate";
+import { registerHostUiSmokeCommands } from "./e2e/hostUi/registerSmokeCommands";
 import { hasWorkspaceFolders, normalizeDefaultSaveScope, toVsCodeConfigurationTarget } from "./config/configScope";
 import {
 	mergeProviderEndpointsPreference,

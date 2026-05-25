@@ -123,8 +123,11 @@ export const PHASE1_CONFIG_SECTIONS = [
 			{
 				key: "retryOnFailure",
 				kind: "boolean",
-				label: { zh: "失败时重试", en: "Retry On Failure" },
-				tip: { zh: "网络抖动或临时错误时自动重试，提升成功率。", en: "Automatically retry transient failures to improve success rate." }
+				label: { zh: "失败时重试（会话批次）", en: "Retry On Failure (session batches)" },
+				tip: {
+					zh: "仅影响识图代理会话批次编排（agentSession/retryStrategy）；不作用于 Copilot Chat 直连 LM，也不替代「请求重试」里的 HTTP/格式重试。",
+					en: "Applies only to vision agent session batch orchestration (agentSession/retryStrategy), not direct Copilot Chat LM calls or the global Request Retry HTTP/format loops."
+				}
 			},
 			{
 				key: "autoClosePolicy",

@@ -4,8 +4,11 @@ import { validateHostUiSmokeChatIntegrationConsistency } from "../e2e/hostUi/cha
 
 test("validateHostUiSmokeChatIntegrationConsistency passes minimal suite log", () => {
 	const log = [
+		'host-ui-smoke.chat.integration.scenario.start {"scenarioId":"vision-proxy-miss"}',
 		'host-ui-smoke.chat.integration.scenario.end {"scenarioId":"vision-proxy-miss","ok":true}',
-		'host-ui-smoke.chat.integration.scenario.end {"scenarioId":"vision-proxy-cache-hit","ok":true}'
+		'host-ui-smoke.chat.integration.scenario.start {"scenarioId":"vision-proxy-cache-hit"}',
+		'host-ui-smoke.chat.integration.scenario.end {"scenarioId":"vision-proxy-cache-hit","ok":true}',
+		"vision.proxy.cache.hit"
 	].join("\n");
 	const report = validateHostUiSmokeChatIntegrationConsistency(log, ["vision-proxy-miss", "vision-proxy-cache-hit"]);
 	assert.equal(report.ok, true);
@@ -38,6 +41,19 @@ test("validateHostUiSmokeChatIntegrationConsistency orders cache hit after miss 
 	].join("\n");
 	const report = validateHostUiSmokeChatIntegrationConsistency(log, ["vision-proxy-miss", "vision-proxy-cache-hit"]);
 	assert.equal(report.ok, true);
+});
+
+test("validateHostUiSmokeChatIntegrationConsistency ignores decoy scenarioId substring outside integration lines", () => {
+	const log = [
+		'debug note: "scenarioId":"vision-proxy-cache-hit" mentioned in prose before suite',
+		'host-ui-smoke.chat.integration.scenario.start {"scenarioId":"vision-proxy-miss"}',
+		'host-ui-smoke.chat.integration.scenario.end {"scenarioId":"vision-proxy-miss","ok":true}',
+		'host-ui-smoke.chat.integration.scenario.start {"scenarioId":"vision-proxy-cache-hit"}',
+		'host-ui-smoke.chat.integration.scenario.end {"scenarioId":"vision-proxy-cache-hit","ok":true}',
+		"vision.proxy.cache.hit"
+	].join("\n");
+	const report = validateHostUiSmokeChatIntegrationConsistency(log, ["vision-proxy-miss", "vision-proxy-cache-hit"]);
+	assert.equal(report.ok, true, JSON.stringify(report.checks));
 });
 
 test("validateHostUiSmokeChatIntegrationConsistency flags missing scenario end", () => {

@@ -856,6 +856,7 @@
 		"catalog:zhipu": "node scripts/catalog/build-zhipu-model-families.mjs",
 		"catalog:build": "npm run catalog:qwen && npm run catalog:zhipu",
 		"catalog:verify": "node scripts/catalog/verify-catalogs-committed.mjs",
+		"verify:ci": "npm run catalog:verify && npm run readme:check && npm run package:verify",
 		"readme:migrate": "node scripts/readme/migrate-readme-to-config.mjs",
 		"prepare:benchmark-screenshot": "node scripts/host-ui/prepare-benchmark-screenshot.mjs",
 		"vscode:prepublish": "npm run compile",

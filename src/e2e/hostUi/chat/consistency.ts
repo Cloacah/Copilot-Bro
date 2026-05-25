@@ -1,5 +1,18 @@
 import type { HostUiSmokeChatIntegrationScenario } from "./integration";
 
+/** Index of a scenario line in `lines`, or -1 when absent. Avoids raw `indexOf` on full log text. */
+export function findHostUiIntegrationScenarioLineIndex(
+	lines: readonly string[],
+	scenarioId: string,
+	event: "start" | "end"
+): number {
+	const eventMarker = `host-ui-smoke.chat.integration.scenario.${event}`;
+	const idNeedles = [`"scenarioId":"${scenarioId}"`, `"scenarioId": "${scenarioId}"`];
+	return lines.findIndex(
+		(line) => line.includes(eventMarker) && idNeedles.some((needle) => line.includes(needle))
+	);
+}
+
 export interface ChatConsistencyCheck {
 	readonly id: string;
 	readonly ok: boolean;
@@ -20,10 +33,12 @@ export function validateHostUiSmokeChatIntegrationConsistency(
 ): ChatConsistencyReport {
 	const checks: ChatConsistencyCheck[] = [];
 	const ranIds = [...scenarioIds];
-	const endLines = logText.split(/\r?\n/u).filter((line) => line.includes("host-ui-smoke.chat.integration.scenario.end"));
+	const lines = logText.split(/\r?\n/u);
+	const endLines = lines.filter((line) => line.includes("host-ui-smoke.chat.integration.scenario.end"));
 
 	for (const scenarioId of ranIds) {
-		const line = endLines.find((entry) => entry.includes(`"scenarioId":"${scenarioId}"`) || entry.includes(`"scenarioId": "${scenarioId}"`));
+		const endIndex = findHostUiIntegrationScenarioLineIndex(lines, scenarioId, "end");
+		const line = endIndex >= 0 ? lines[endIndex] : undefined;
 		checks.push({
 			id: `scenario-end:${scenarioId}`,
 			ok: Boolean(line),
@@ -39,9 +54,9 @@ export function validateHostUiSmokeChatIntegrationConsistency(
 	}
 
 	if (ranIds.includes("vision-proxy-cache-hit") && ranIds.includes("vision-proxy-miss")) {
-		const missIdx = logText.indexOf('"scenarioId":"vision-proxy-miss"');
-		const hitIdx = logText.indexOf('"scenarioId":"vision-proxy-cache-hit"');
-		const missBeforeHit = (missIdx >= 0 && hitIdx >= 0 && missIdx < hitIdx)
+		const missStartIdx = findHostUiIntegrationScenarioLineIndex(lines, "vision-proxy-miss", "start");
+		const hitStartIdx = findHostUiIntegrationScenarioLineIndex(lines, "vision-proxy-cache-hit", "start");
+		const missBeforeHit = (missStartIdx >= 0 && hitStartIdx >= 0 && missStartIdx < hitStartIdx)
 			|| logText.includes("vision.proxy.cache.hit");
 		checks.push({
 			id: "ordering:miss-before-hit",

@@ -30,7 +30,9 @@
 
 ## 识图路由（当前生产）
 
+- **实现顺序 SSOT**：[`docs/vision-route-order.md`](vision-route-order.md)（对应 `src/visionProtocol/visionRoutePipeline.ts`）。  
 - **proxy**：文本模型通过另一视觉模型生成结构化描述，再替换原图进入主模型。  
 - **native**：模型自带 `vision: true` 时，扩展内直连高保真结构化 pass（与 proxy **同契约**）；全局关闭代理时优先 native。  
 - **防套娃**：`visionOrchestrationContext` 抑制嵌套识图；代理仅单层。  
-- **纯色/低细节图**：格式校验失败时使用 `vision.*.structured.format-fallback`，仍写入 `vision.evidence.persisted`。
+- **纯色/低细节图**：格式校验失败时使用 `vision.*.structured.format-fallback`，仍写入 `vision.evidence.persisted`。  
+- **P7 重放契约**：`visionLogReplay` 要求 `vision.proxy.cache.hit` 之后不得再出现 `request.start`（见 `src/test/visionLogReplay.test.ts`）。

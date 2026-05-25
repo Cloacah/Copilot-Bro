@@ -9,20 +9,20 @@ auditScope:
 
 # 风险审计与修复计划（只读审计产物）
 
-> **约束**：本文件为审计与修复跟踪。2026-05-25 起已实施阶段 A–D（见 §8）；阶段 E/F 部分待办。每步变更后须跑列出的校验命令。
+> **约束**：本文件为审计与修复跟踪。阶段 A–F 主体已完成（见 §8）。**R-P2-01**（extension 动态拆 smoke bundle）仍为可选大改。
 
-## 8. 实施状态（2026-05-25）
+## 8. 实施状态（2026-05-26）
 
 | 阶段 | 状态 | 摘要 |
 |------|------|------|
-| A P0 脚本 / plan gitignore | ✅ | `release:vsix` → `scripts/release-vsix.mjs`；`install:vscode` → 0.2.0；移除 `plan/` gitignore |
+| A P0 脚本 / plan gitignore | ✅ | `release:vsix` → `scripts/release-vsix.mjs`；`install:vscode` → 0.2.0；`plan/` 已纳入版本库 |
 | B 文档 16+1 | ✅ | `readme.sections.json` + `npm run readme:generate`；`scripts/README.md` |
-| C Host UI | ✅ | 可执行 turn 计数；budget 候选封顶 4；p5 `native-vision`；log-watch/validator 对齐；consistency 排序 |
+| C Host UI | ✅ | 可执行 turn 计数；budget 候选封顶 4；p5 `native-vision`；log-watch/validator 对齐；consistency 用 scenario 行锚点 |
 | D 识图重试 | ✅ | `retry.enabled` 关闭格式环与结构化 HTTP 重试 |
-| E 单测/CI | ✅ | `catalog:verify`；`secretsStorage` / `visionStructuredRetryPolicy` 单测；`npm test` 全绿 |
-| F Release 剔 e2e | ✅ | `.vscodeignore` + `verify-release-vsix` / `vsixPackagePolicy` 统一拒 `out/e2e/**`；`extension.js` 仍含 smoke（env 门闩，未拆 import） |
+| E 单测/CI | ✅ | `catalog:verify`（离线）、`verify:ci`、`secretsStorage` / `visionStructuredRetryPolicy` / `providerErrorSurface` |
+| F Release 剔 e2e | ✅ | Release VSIX 拒 `out/e2e/**`；`smokeModeGate` 抽离 smoke 门闩 |
 
-**R-P0-01～03**：已修复。**R-P1-01～06、09**：已修复。**R-P1-07**：文档澄清 `retryOnFailure`（批次编排预留）。**R-P1-08**：已缓解（`retry.enabled` 关时格式+HTTP 均为 1）。**R-P2-01**：部分（Release VSIX 无 `out/e2e`；`extension.ts` 仍静态 import smoke）。**R-P2-02**：部分（`secretsStorage` 单测，无 `provider.ts` 覆盖）。**R-P2-05～07、10**：已修复或新增脚本。**R-P2-11～12**：仍待办（文档/重放契约）。
+**R-P0-01～03**：已修复。**R-P1-01～06、09**：已修复。**R-P1-07**：UI + checklist 澄清 `retryOnFailure` 仅 agentSession 批次。**R-P1-08**：已缓解。**R-P2-01**：部分（VSIX 无 `out/e2e` 树；`extension.ts` 仍静态 import smoke 实现）。**R-P2-02**：部分（`providerErrorSurface` + pipeline；无 `provider.ts` 类级单测）。**R-P2-05**：consistency 场景锚点修复。**R-P2-07**：`catalog:verify` + `verify:ci`。**R-P2-09**：`smokePrompt.ts` SSOT。**R-P2-11**：`visionLogReplay` cache-hit 后禁止 `request.start`。**R-P2-12**：`docs/vision-route-order.md` + `visionRoutePipeline.ts`。**R-P2-03/04/06/08**：保留为设计权衡或低优先级。
 
 ## 0. 审计方法与记忆汇总规则
 

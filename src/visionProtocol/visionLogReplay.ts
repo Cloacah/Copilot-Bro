@@ -12,6 +12,9 @@ export interface VisionLogReplayFacts {
 	/** True when any log line references Copilot Chat `screenshot_page` image parts (debug / prompt export). */
 	readonly hasScreenshotPageReference: boolean;
 	readonly requestHasImageParts: boolean | undefined;
+	readonly requestStartCount: number;
+	/** True when any `request.start` appears after the last `vision.proxy.cache.hit` line. */
+	readonly requestStartAfterCacheHit: boolean;
 }
 
 function extractJsonPayload(line: string): Record<string, unknown> | undefined {
@@ -41,8 +44,20 @@ export function parseVisionLogReplay(logText: string): VisionLogReplayFacts {
 	const routeStrategies: string[] = [];
 	let hasScreenshotPageReference = false;
 	let requestHasImageParts: boolean | undefined;
+	let requestStartCount = 0;
+	let requestStartAfterCacheHit = false;
+	let seenCacheHit = false;
 
 	for (const line of logText.split(/\r?\n/u)) {
+		if (line.includes(VisionLogEvent.proxyCacheHit)) {
+			seenCacheHit = true;
+		}
+		if (line.includes(ProviderLogEvent.requestStart)) {
+			requestStartCount += 1;
+			if (seenCacheHit) {
+				requestStartAfterCacheHit = true;
+			}
+		}
 		if (line.includes("screenshot_page")) {
 			hasScreenshotPageReference = true;
 		}
@@ -81,7 +96,9 @@ export function parseVisionLogReplay(logText: string): VisionLogReplayFacts {
 		cacheMissEvidenceIds,
 		routeStrategies,
 		hasScreenshotPageReference,
-		requestHasImageParts
+		requestHasImageParts,
+		requestStartCount,
+		requestStartAfterCacheHit
 	};
 }
 
@@ -100,6 +117,9 @@ export function validateVisionCacheHitEvidenceContract(facts: VisionLogReplayFac
 	const hitId = facts.cacheHitEvidenceIds[0];
 	if (hitId && !facts.boundEvidenceIds.includes(hitId)) {
 		missing.push("log.vision.cache-hit-matches-bound-evidence");
+	}
+	if (facts.requestStartAfterCacheHit) {
+		missing.push("log.replay.no-request-start-after-cache-hit");
 	}
 	return missing;
 }

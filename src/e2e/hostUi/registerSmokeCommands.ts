@@ -10,6 +10,9 @@ import {
 import { listPromptPresets } from "../../promptPresets";
 import type { ExtendedModelsProvider } from "../../provider";
 import type { Logger } from "../../logger";
+import { isHostUiSmokeMode } from "../../smokeModeGate";
+
+export { isHostUiSmokeMode } from "../../smokeModeGate";
 
 export interface HostUiSmokeCommandHandlers {
 	openChat: () => void | Promise<void>;
@@ -24,10 +27,6 @@ export interface HostUiSmokeCommandHandlers {
 	agentSmokeBudgeted: () => void | Promise<void>;
 	runRequest: () => void | Promise<void>;
 	submitChatRequest: () => void | Promise<void>;
-}
-
-export function isHostUiSmokeMode(): boolean {
-	return process.env.COPILOT_BRO_UI_SMOKE === "1";
 }
 
 export function registerHostUiSmokeCommands(
