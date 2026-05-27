@@ -5,11 +5,6 @@ import { extname, isAbsolute, join, normalize } from "node:path";
 import { constants as fsConstants } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { ExtensionSettings, ModelConfig } from "./types";
-import { getRuntimeModelId } from "./config/settings";
-import {
-	isCopilotAutoVisionModelId,
-	resolveExtensionVisionProxyTarget
-} from "./visionProxyModelSelection";
 import { STRUCTURED_PROXY_CONTRACT_VERSION } from "./visionProxyStructuredPlan";
 import { resolveImageMimeType } from "./toolCooperation/imageMime";
 import { saveVisionArtifact } from "./toolCooperation/visionArtifactStore";
@@ -38,6 +33,12 @@ import {
 	type VisionTaskKind
 } from "./visionProtocol/visionTaskStack";
 import { resolveVisionProxyPolicy } from "./visionProxyPolicy";
+import { resolveVisionProxyCandidateChain } from "./visionProxyCandidateChain";
+import {
+	runVisionProxyCandidateChain,
+	runVisionProxyDescriptionWithRetry,
+	type VisionProxyCandidate
+} from "./visionProxyRetryCoordinator";
 import {
 	resolveStructuredProxyDescription,
 	resolveStructuredNativeDescription,
@@ -95,11 +96,12 @@ export async function resolveVisionProxyMessages(
         visionProxyEnabled: settings.visionProxy.enabled,
         modelHasVision: model.vision
     });
-    const proxyModel = await selectVisionProxyModel(model, settings, logger);
-    if (!proxyModel) {
+    const candidates = await resolveVisionProxyCandidateChain(model, settings, logger);
+    if (candidates.length === 0) {
         logger.warn("vision.proxy.noModelFound", {
             model: model.id,
             enabled: settings.visionProxy.enabled,
+            selectionMode: settings.visionProxy.selectionMode,
             defaultModelId: settings.visionProxy.defaultModelId
         });
         if (options.reportFailure) {
@@ -115,41 +117,85 @@ export async function resolveVisionProxyMessages(
             error: errorMessages.visionProxyUnavailable
         };
     }
-	const batch = await applyStructuredVisionToMessageBatch({
+
+	const batch = await runVisionProxyCandidateChain(candidates, settings, logger, (candidate) =>
+		applyStructuredVisionToMessageBatch(buildVisionProxyBatchInput({
+			candidate,
+			hydratedMessages,
+			fallbackMessages: messages,
+			model,
+			settings,
+			logger,
+			token,
+			options
+		}))
+	);
+	return {
+		messages: batch.messages,
+		status: batch.status,
+		error: batch.error,
+		cacheHitCount: batch.cacheHitCount,
+		cacheMissCount: batch.cacheMissCount
+	};
+}
+
+function buildVisionProxyBatchInput(input: {
+	candidate: VisionProxyCandidate;
+	hydratedMessages: readonly vscode.LanguageModelChatRequestMessage[];
+	fallbackMessages: readonly vscode.LanguageModelChatRequestMessage[];
+	model: ModelConfig;
+	settings: ExtensionSettings;
+	logger: Logger;
+	token: vscode.CancellationToken;
+	options: ResolveVisionProxyOptions;
+}) {
+	const { candidate, hydratedMessages, fallbackMessages, model, settings, logger, token, options } = input;
+	const proxyModel = candidate.chatModel;
+	const proxyModelId = candidate.configuredId;
+	return {
 		hydratedMessages,
-		fallbackMessages: messages,
+		fallbackMessages,
 		model,
 		visionModelId: proxyModel.id,
 		settings,
 		logger,
 		options,
-		route: "proxy",
+		route: "proxy" as const,
 		buildFinalPrompt: () => {
 			const highFidelityPrompt = settings.visionProcessing.highFidelityPrompt;
 			const customPrompt = settings.visionProxy.customPrompt;
 			return [highFidelityPrompt, customPrompt].filter(Boolean).join("\n\n");
 		},
 		buildCacheKeyModelId: () => proxyModel.id,
-		resolveDescription: (imageParts, finalPrompt, handoffIntent) =>
-			resolveStructuredProxyDescription(proxyModel, imageParts, finalPrompt, settings, logger, token, handoffIntent),
-		getDescriptionFromCache: (cacheKey) => visionProxyDescriptionCache.get(cacheKey),
-		setDescriptionInCache: (cacheKey, description) => setVisionProxyCachedDescription(cacheKey, description),
+		resolveDescription: (imageParts: readonly vscode.LanguageModelDataPart[], finalPrompt: string, handoffIntent: VisionHandoffIntent) =>
+			runVisionProxyDescriptionWithRetry(
+				() => resolveStructuredProxyDescription(proxyModel, imageParts, finalPrompt, settings, logger, token, handoffIntent),
+				settings,
+				logger,
+				{ modelLabel: proxyModelId, route: "proxy" }
+			),
+		getDescriptionFromCache: (cacheKey: string) => visionProxyDescriptionCache.get(cacheKey),
+		setDescriptionInCache: (cacheKey: string, description: string) => setVisionProxyCachedDescription(cacheKey, description),
 		buildVisionCacheKey: buildVisionProxyCacheKey,
-		persistEvidence: (imageParts, description, execution, handoffIntent) =>
-			persistStructuredVisionEvidence(imageParts, description, model.id, proxyModel.id, execution, handoffIntent, logger),
+		persistEvidence: (
+			imageParts: readonly vscode.LanguageModelDataPart[],
+			description: string,
+			execution: ProxyExecutionSummary | undefined,
+			handoffIntent: VisionHandoffIntent
+		) => persistStructuredVisionEvidence(imageParts, description, model.id, proxyModel.id, execution, handoffIntent, logger),
 		appendDescription: appendProxyDescriptionToMessageParts,
 		log: {
 			cacheHit: "vision.proxy.cache.hit",
 			cacheMiss: "vision.proxy.cache.miss",
 			structured: "vision.proxy.structured",
 			failed: "vision.proxy.failed",
-			inputBoundModelField: "proxyModelId"
+			inputBoundModelField: "proxyModelId" as const
 		},
-		onCacheHit: ({ handoffIntent, reused }) => {
+		onCacheHit: ({ handoffIntent, reused }: { handoffIntent: VisionHandoffIntent; reused: boolean }) => {
 			logger.info("vision.handoff.resolved", {
 				model: model.id,
 				handoffIntent,
-				proxyModelId: proxyModel.id,
+				proxyModelId,
 				reused: true
 			});
 			if (handoffIntent === "describe-only") {
@@ -160,21 +206,14 @@ export async function resolveVisionProxyMessages(
 				});
 			}
 		},
-		onCacheMiss: ({ handoffIntent }) => {
+		onCacheMiss: ({ handoffIntent }: { handoffIntent: VisionHandoffIntent }) => {
 			logger.info("vision.handoff.resolved", {
 				model: model.id,
 				handoffIntent,
-				proxyModelId: proxyModel.id
+				proxyModelId
 			});
 		},
 		emitStructuredProgress: emitStructuredProxyProgress
-	});
-	return {
-		messages: batch.messages,
-		status: batch.status,
-		error: batch.error,
-		cacheHitCount: batch.cacheHitCount,
-		cacheMissCount: batch.cacheMissCount
 	};
 }
 export function isVisionProxyEnabledForModel(model: ModelConfig, settings: ExtensionSettings): boolean {
@@ -352,100 +391,16 @@ async function selectVisionProxyModel(
 	settings: ExtensionSettings,
 	logger: Logger
 ): Promise<vscode.LanguageModelChat | undefined> {
-    const configured = model.visionProxyModelId;
-    const proxyPolicy = resolveVisionProxyPolicy(model, settings);
-    if (!proxyPolicy.enabled) {
-        logger.debug("vision.proxy.disabled", {
-            model: model.id,
-            configured,
-            visionProxyEnabled: settings.visionProxy.enabled,
-            reason: proxyPolicy.reason,
-            requestedModelId: proxyPolicy.requestedModelId
-        });
-        return undefined;
-    }
-    const selfIds = new Set([model.id, getRuntimeModelId(model)]);
-    const requestedId = proxyPolicy.requestedModelId;
-    // Try configured or default model ID first (extension vision models must not fall through to Copilot auto).
-    if (requestedId && !selfIds.has(requestedId)) {
-        const extensionTarget = resolveExtensionVisionProxyTarget(requestedId, settings.models, selfIds);
-        if (extensionTarget?.kind === "extended") {
-            const extensionMatches = await vscode.lm.selectChatModels({
-                vendor: "extendedModels",
-                id: extensionTarget.runtimeId
-            });
-            const extensionMatch = extensionMatches.find((candidate) => candidate.id === extensionTarget.runtimeId);
-            if (extensionMatch) {
-                logger.info("vision.proxy.selected", {
-                    modelId: extensionMatch.id,
-                    configuredId: requestedId,
-                    selection: "extension-configured",
-                    vendor: extensionMatch.vendor
-                });
-                return extensionMatch;
-            }
-            logger.warn("vision.proxy.extensionModelUnavailable", {
-                requestedId,
-                runtimeId: extensionTarget.runtimeId,
-                model: model.id
-            });
-        }
-        const selected = await vscode.lm.selectChatModels({ id: requestedId });
-        const match = selected.find((candidate) => !selfIds.has(candidate.id)
-            && candidate.vendor !== "extendedModels"
-            && !isCopilotAutoVisionModelId(candidate.id, candidate.vendor));
-        if (match) {
-            logger.info("vision.proxy.selected", {
-                modelId: match.id,
-                configuredId: requestedId,
-                selection: "configured"
-            });
-            return match;
-        }
-        logger.warn("vision.proxy.configuredModelUnavailable", { requestedId, model: model.id });
-    }
-    // Auto-detect: prefer models with explicit imageInput capability
-    const allModels = await vscode.lm.selectChatModels();
-    const nonSelfModels = allModels.filter((candidate) => !selfIds.has(candidate.id));
-    logger.debug("vision.proxy.candidates", {
-        model: model.id,
-        total: allModels.length,
-        nonSelf: nonSelfModels.length,
-        vendors: [...new Set(allModels.map((candidate) => candidate.vendor))],
-        sample: allModels.slice(0, 8).map((candidate) => ({
-            id: candidate.id,
-            vendor: candidate.vendor,
-            imageInput: Boolean((candidate as { capabilities?: { imageInput?: boolean } }).capabilities?.imageInput),
-            self: selfIds.has(candidate.id)
-        }))
-    });
-    if (allModels.length === 0) {
-        logger.warn("vision.proxy.noModelsAvailable", { model: model.id });
-        return undefined;
-    }
-    const explicitVisionModel = allModels.find((candidate) => !selfIds.has(candidate.id)
-        && candidate.vendor !== "extendedModels"
-        && Boolean((candidate as { capabilities?: { imageInput?: boolean } }).capabilities?.imageInput)
-        && !isCopilotAutoVisionModelId(candidate.id, candidate.vendor));
-    if (explicitVisionModel) {
-        logger.info("vision.proxy.auto-selected", { modelId: explicitVisionModel.id });
-        return explicitVisionModel;
-    }
-    const genericCopilotModel = allModels.find((candidate) => !selfIds.has(candidate.id)
-        && candidate.vendor !== "extendedModels"
-        && !isCopilotAutoVisionModelId(candidate.id, candidate.vendor));
-    if (genericCopilotModel) {
-        logger.info("vision.proxy.fallback-selected", { modelId: genericCopilotModel.id });
-        return genericCopilotModel;
-    }
-    logger.warn("vision.proxy.noSuitableModel", {
-        model: model.id,
-        availableModels: allModels.length,
-        nonSelfModels: nonSelfModels.length,
-        nonExtendedModels: nonSelfModels.filter((candidate) => candidate.vendor !== "extendedModels").length,
-        selfIds: Array.from(selfIds)
-    });
-    return undefined;
+	const proxyPolicy = resolveVisionProxyPolicy(model, settings);
+	if (!proxyPolicy.enabled) {
+		logger.debug("vision.proxy.disabled", {
+			model: model.id,
+			reason: proxyPolicy.reason
+		});
+		return undefined;
+	}
+	const chain = await resolveVisionProxyCandidateChain(model, settings, logger);
+	return chain[0]?.chatModel;
 }
 function isToolResultPart(part: unknown): part is vscode.LanguageModelToolResultPart {
     if (!part || typeof part !== "object") {

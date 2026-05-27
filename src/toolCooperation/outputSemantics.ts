@@ -167,6 +167,36 @@ function escapeVisionThinkingHtml(value: string): string {
 		.replace(/`/g, "&#96;");
 }
 
+export type VisionCollapsibleCategory =
+	| "route-status"
+	| "preprocess"
+	| "input-bound"
+	| "structured-snapshot"
+	| "compat-fallback"
+	| "debug"
+	| "batch-progress";
+
+export function renderVisionCollapsibleBlock(
+	category: VisionCollapsibleCategory,
+	summary: string,
+	body: string,
+	options: { structured?: boolean } = {}
+): string {
+	const marker = options.structured
+		? "data-extended-models-vision-structured=\"true\""
+		: "data-extended-models-vision=\"true\"";
+	const safeSummary = escapeVisionProgressHtml(summary.trim() || category);
+	const safeBody = options.structured ? body.trim() : escapeVisionProgressHtml(body.trim());
+	return [
+		`<details ${marker}>`,
+		`<summary>${safeSummary}</summary>`,
+		"",
+		safeBody || "_empty_",
+		"</details>",
+		""
+	].join("\n");
+}
+
 export function formatVisionStructuredThinkingBlock(
 	snapshotJson: string,
 	meta: {
@@ -180,24 +210,19 @@ export function formatVisionStructuredThinkingBlock(
 ): string {
 	const trimmed = snapshotJson.trim();
 	const routeLabel = meta.route === "native" ? "native" : "proxy";
-	const headline = meta.reused
-		? `${statusMessages.visionPrefix} structured evidence · cache reuse`
-		: `${statusMessages.visionPrefix} structured evidence · ${routeLabel} · ${meta.contract}`;
+	const summary = meta.reused
+		? `识图 · 结构化 · 缓存复用 · ${meta.elementCount} 元素`
+		: `识图 · 结构化 · ${routeLabel} · ${meta.elementCount} 元素`;
 	const context = [
 		meta.sourceKind ? `source=${meta.sourceKind}` : "",
 		meta.toolName ? `tool=${meta.toolName}` : "",
-		`elements=${meta.elementCount}`
+		`contract=${meta.contract}`
 	].filter((part) => part.length > 0).join(" · ");
 	const safeJson = escapeVisionThinkingHtml(trimmed.slice(0, 6000));
-	const body = trimmed.length > 0
-		? [
-			'<details data-extended-models-vision-structured="true">',
-			`<summary>${routeLabel} snapshot · ${meta.elementCount} element(s)</summary>`,
-			`<pre>${safeJson}</pre>`,
-			"</details>"
-		].join("\n")
+	const innerBody = trimmed.length > 0
+		? [`<pre>${safeJson}</pre>`, context].filter(Boolean).join("\n")
 		: "_structured snapshot unavailable_";
-	return [headline, context, body].filter((line) => line.length > 0).join("\n");
+	return renderVisionCollapsibleBlock("structured-snapshot", summary, innerBody, { structured: true });
 }
 
 export function isVisionStructuredThinkingText(text: string): boolean {
@@ -210,16 +235,21 @@ export function isVisionProgressDetailsText(text: string): boolean {
 }
 
 export function renderVisionThinkingDetails(text: string): string {
-	const displayText = isVisionStructuredThinkingText(text) ? text.trim() : createVisionDetailsText(text);
+	return formatVisionProgressForChatCollapsible(text);
+}
+
+/** Collapsed Chat HTML for batched vision lines (never emits bare `[Vision]` outside details). */
+export function formatVisionProgressForChatCollapsible(text: string): string {
+	const trimmed = text.trim();
+	if (!trimmed) {
+		return renderVisionCollapsibleBlock("batch-progress", "识图", "_empty_");
+	}
+	if (isVisionStructuredThinkingText(trimmed) || trimmed.includes("data-extended-models-vision")) {
+		return trimmed;
+	}
+	const displayText = createVisionDetailsText(trimmed);
 	const summary = createVisionProgressSummary(displayText);
-	return [
-		`<details data-extended-models-vision="true">`,
-		`<summary>识图进度 · ${escapeVisionProgressHtml(summary)}</summary>`,
-		"",
-		displayText,
-		"</details>",
-		""
-	].join("\n");
+	return renderVisionCollapsibleBlock("batch-progress", `识图进度 · ${summary}`, displayText);
 }
 
 function createVisionProgressSummary(displayText: string): string {

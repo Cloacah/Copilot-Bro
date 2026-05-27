@@ -1,7 +1,7 @@
 {
   "source": "dashscope-api-v1-models",
-  "fetchedAt": "2026-05-25T06:47:59.151Z",
-  "apiTotal": 70,
+  "fetchedAt": "2026-05-26T06:37:36.021Z",
+  "apiTotal": 72,
   "filters": {
     "providers": [
       "qwen",
@@ -15,7 +15,7 @@
   },
   "consoleUrl": "https://bailian.console.aliyun.com/cn-beijing/?tab=model#/model-market/all?providers=qwen%2Cwan&capabilities=TG%2CReasoning%2CVU",
   "familyCount": 24,
-  "modelCount": 70,
+  "modelCount": 72,
   "grouping": "bailian-model-card",
   "families": [
     {
@@ -292,8 +292,10 @@
       "category": "qwen3.7",
       "defaultVersionId": "qwen3.7-max",
       "versionIds": [
+        "qwen3.7-max-preview",
         "qwen3.7-max",
-        "qwen3.7-max-2026-05-20"
+        "qwen3.7-max-2026-05-20",
+        "qwen3.7-max-2026-05-17"
       ]
     }
   ]

@@ -2,10 +2,27 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased]
+
+### Changed
+
+- **Zhipu catalog scrape** — scrape [BigModel model docs](https://docs.bigmodel.cn/cn/guide/models/) per-model tab variants and per-tab parameters; hub-only slugs are no longer emitted as callable families (e.g. `GLM-4.1V-Thinking` is represented by `glm-4.1v-thinking-flash` and `glm-4.1v-thinking-flashx`).
+- **Zhipu model naming** — date suffixes like `250414` are treated as version ids (not display names) and grouped under stable families (e.g. `GLM 4 FlashX`).
+- **Config UI (model vision proxy)** — custom-list selector rows are width-constrained and aligned to the editor grid to avoid overflow.
+- **README** — refreshed built-in provider/model examples and updated vision proxy configuration semantics to match the new per-model selection modes.
+
+### Fixed
+
+- **Wrapped (builtin) vision routing** — `wrapperProxyAvailable` follows wrapped models when global/model proxy policy is enabled, so the compatibility matrix can select `wrapper-proxy` instead of always degrading.
+- **Proxy route mismatch** — when the matrix selects proxy/wrapper-proxy but `resolveVisionProxyMessages` returns `not-needed`, the request now uses matrix fallback instead of silently continuing (which relied on the residual-image guard).
+- **Per-model vision proxy `auto`** — `effective.enabled` is `false` when the model has native vision, matching `visionProxyPolicy` `native-default`.
+
 ## [0.2.0] - 2026-05-21
 
 ### Changed
 
+- **Vision Chat UI** — all vision/debug Chat output goes through `visionChatSurface` as collapsible `<details>` (`LanguageModelTextPart` only); default `chatDebugVisibility` is **false** (no bare `[Vision]` ThinkingPart lines).
+- **Vision proxy selection** — global `selectionMode` (`auto` / `fixed` / `custom-list`), ordered `customModelIds`, and per-model rate-limit retries (`customListMaxRetriesPerModel`, `customListMaxDelayMs`); configuration page adds mode picker and custom list editor.
 - **README** — removed the placeholder “Screenshots” section; added high-fidelity vision flow diagrams for **native** and **proxy** routes; added a **Visible settings guide** aligned with the configuration page and Phase 1 UI; expanded the generated configuration reference (integrity checks, defaults, restore-pipeline suspension note).
 - **Code structure** — split extension smoke/runtime modules, vision structured-pass routing, smoke log bridge, and `scripts/` / `tsconfig` layout (P1–P3 closed).
 - **Structured proxy vision** — proxy LM `sendRequest` + stream wrapped with `executeStructuredVisionLmWithRetry` (HTTP retry symmetric with native when `retry.enabled`).
@@ -26,6 +43,7 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
+- **Vision proxy rate limits** — transient 429/1305 (Zhipu) and `engine_overloaded` (Moonshot) retry on the same model, then advance through custom-list candidates when configured.
 - **Vision gate false positives** — file paths or filenames like `image_001.png` in chat text no longer trigger the vision branch or repeated `[Vision] start` UI; only attached image parts (or inline `data:image/...;base64`) count. Proxy route selection and status lines are skipped when no actionable image payload is present (no wasted vision API calls).
 - Host UI integration retry now covers **stream-phase** provider errors (429/1305) and advances through `zhipu.vision-native` paid fallbacks (`glm-4.6v-flashx`, `glm-4.6v`).
 - `verify-release-vsix.mjs` aligned with dynamic smoke activation (no static `e2e/hostUi/env` require).

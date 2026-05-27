@@ -1,63 +1,87 @@
 import { getRuntimeModelId } from "./config/modelIdentity";
+import { resolveEffectiveModelVisionProxySelection } from "./config/modelVisionProxy";
 import type { ExtensionSettings, ModelConfig } from "./types";
-
-const MODEL_VISION_PROXY_DISABLED = "__vision_proxy_disabled__";
 
 export interface VisionProxyPolicy {
 	enabled: boolean;
 	required: boolean;
 	requestedModelId?: string;
-	reason: "explicit-disabled" | "self-disabled" | "model-configured" | "global-configured" | "global-auto" | "native-default";
+	reason:
+		| "explicit-disabled"
+		| "self-disabled"
+		| "model-configured"
+		| "model-custom-list"
+		| "model-auto"
+		| "global-configured"
+		| "global-custom-list"
+		| "global-auto"
+		| "native-default";
 }
 
 export function resolveVisionProxyPolicy(
 	model: ModelConfig,
 	settings: Pick<ExtensionSettings, "visionProxy">
 ): VisionProxyPolicy {
-	const configured = normalizeRequestedVisionProxyId(model.visionProxyModelId);
-	if (configured.kind === "disabled") {
-		return { enabled: false, required: false, reason: "explicit-disabled" };
+	const effective = resolveEffectiveModelVisionProxySelection(model, settings);
+	if (!effective.enabled) {
+		if (effective.scope === "disabled") {
+			return { enabled: false, required: false, reason: "explicit-disabled" };
+		}
+		return { enabled: false, required: false, reason: "native-default" };
 	}
 
-	const normalizedDefault: { kind: "disabled" } | { kind: "target"; value?: string } = settings.visionProxy.enabled
-		? normalizeRequestedVisionProxyId(settings.visionProxy.defaultModelId)
-		: { kind: "target" };
-	const defaultModelId = normalizedDefault.kind === "target" ? normalizedDefault.value : undefined;
-	const requestedModelId = configured.value ?? defaultModelId;
-	if (requestedModelId && getModelSelfIds(model).has(requestedModelId)) {
-		return { enabled: false, required: false, requestedModelId, reason: "self-disabled" };
+	const selfIds = getModelSelfIds(model);
+	if (effective.selectionMode === "fixed") {
+		const id = effective.fixedModelId.trim();
+		if (!id) {
+			if (effective.source === "inherit" && !model.vision && settings.visionProxy.enabled) {
+				return { enabled: true, required: true, reason: "global-auto" };
+			}
+			return {
+				enabled: false,
+				required: false,
+				reason: effective.source === "model"
+					? "model-configured"
+					: model.vision
+						? "native-default"
+						: "global-configured"
+			};
+		}
+		if (selfIds.has(id)) {
+			return { enabled: false, required: false, requestedModelId: id, reason: "self-disabled" };
+		}
+		return {
+			enabled: true,
+			required: true,
+			requestedModelId: id,
+			reason: effective.source === "model" ? "model-configured" : "global-configured"
+		};
 	}
-	if (configured.value) {
-		return { enabled: true, required: true, requestedModelId, reason: "model-configured" };
+
+	if (effective.selectionMode === "custom-list") {
+		if (!effective.customModelIds.length) {
+			return {
+				enabled: false,
+				required: false,
+				reason: effective.source === "model" ? "model-custom-list" : "global-custom-list"
+			};
+		}
+		return {
+			enabled: true,
+			required: true,
+			reason: effective.source === "model" ? "model-custom-list" : "global-custom-list"
+		};
 	}
-	if (defaultModelId) {
-		return { enabled: true, required: true, requestedModelId, reason: "global-configured" };
+
+	if (!model.vision) {
+		return {
+			enabled: true,
+			required: true,
+			reason: effective.source === "model" ? "model-auto" : "global-auto"
+		};
 	}
-	if (!model.vision && model.visionProxyModelId !== null && settings.visionProxy.enabled) {
-		return { enabled: true, required: true, reason: "global-auto" };
-	}
+
 	return { enabled: false, required: false, reason: "native-default" };
-}
-
-function normalizeRequestedVisionProxyId(value: unknown): { kind: "disabled" } | { kind: "target"; value?: string } {
-	if (value === null) {
-		return { kind: "disabled" };
-	}
-	if (typeof value !== "string") {
-		return { kind: "target" };
-	}
-	const normalized = value.trim();
-	if (!normalized) {
-		return { kind: "target" };
-	}
-	if (
-		normalized.toLowerCase() === "auto"
-		|| normalized.toLowerCase() === "null"
-		|| normalized === MODEL_VISION_PROXY_DISABLED
-	) {
-		return { kind: "disabled" };
-	}
-	return { kind: "target", value: normalized };
 }
 
 function getModelSelfIds(model: ModelConfig): Set<string> {

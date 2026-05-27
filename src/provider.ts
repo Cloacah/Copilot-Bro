@@ -31,14 +31,13 @@ import { countRequestImageParts } from "./visionProtocol/visionMessageScan";
 import { needsVisionFromRequestMessages } from "./visionProtocol/visionMessageScan";
 import { HostUiSmokeLogEvent } from "./visionProtocol/hostUiSmokeLogEvents";
 import { createVisionDetailsText } from "./toolCooperation/outputSemantics";
-import { createVisionProgressReporter } from "./toolCooperation/visionProgressReporter";
+import { createVisionChatSurface, createVisionRouteReporter, emitVisionRouteStatusProgress } from "./visionProtocol/visionChatSurface";
 import type { ToolSelection } from "./toolCooperation/toolSelector";
 import { prependVisionPromptContract, buildVisionPromptContract } from "./toolCooperation/visionPromptContract";
 import { getImageAnalyzeAdapter } from "./toolCooperation/adapters/registry";
 import {
 	appendNativeVisionPostCompletionProgress,
 	applyVisionResidualImageGuard,
-	reportVisionRouteChatDebug,
 	runVisionPreRoute,
 	runVisionStrategyBranch,
 	type VisionRouteReporter
@@ -180,22 +179,18 @@ export class ExtendedModelsProvider implements LanguageModelChatProvider {
 		let activeBatchId: string | undefined;
 		let nativeVisionImageHashes: string[] = [];
 		const analyzer = getImageAnalyzeAdapter();
-		const visionProgressReporter = createVisionProgressReporter();
 		const chatDebugVisible = settings.visionProcessing.chatDebugVisibility;
-		const visionReporter: VisionRouteReporter = {
-			appendProgress: (text) => {
-				visionProgressReporter.append(text);
-			},
-			flushProgress: () => {
-				const meta = visionProgressReporter.flush(progress, chatDebugVisible);
-				if (meta && process.env.COPILOT_BRO_UI_SMOKE === "1") {
+		const visionChatSurface = createVisionChatSurface(this.logger);
+		const visionReporter: VisionRouteReporter = createVisionRouteReporter(
+			visionChatSurface,
+			progress,
+			chatDebugVisible,
+			(meta) => {
+				if (process.env.COPILOT_BRO_UI_SMOKE === "1") {
 					this.logger.info(HostUiSmokeLogEvent.visionProgressFlush, meta);
 				}
-			},
-			reportChatDebug: (text) => {
-				reportVisionRouteChatDebug(progress, text, chatDebugVisible);
 			}
-		};
+		);
 
 		if (visionNeeded) {
 			const preRoute = await runVisionPreRoute({
@@ -301,7 +296,12 @@ export class ExtendedModelsProvider implements LanguageModelChatProvider {
 					isolateFailedBatch(activeBatchId, normalized);
 				}
 				if (visionStatusStarted && strategySelection) {
-					reportVisionProgress(progress, formatVisionStatus("failed", strategySelection, trace, settings.requestAttribution), settings.visionProcessing.chatDebugVisibility);
+					emitVisionRouteStatusProgress(
+						progress,
+						formatVisionStatus("failed", strategySelection, trace, settings.requestAttribution),
+						settings.visionProcessing.chatDebugVisibility,
+						this.logger
+					);
 				}
 				this.logger.error("request.failed", {
 					model: model.id,
@@ -435,7 +435,12 @@ export class ExtendedModelsProvider implements LanguageModelChatProvider {
 				isolateFailedBatch(activeBatchId, normalized);
 			}
 			if (visionStatusStarted && strategySelection) {
-				reportVisionProgress(progress, formatVisionStatus("failed", strategySelection, trace, settings.requestAttribution), settings.visionProcessing.chatDebugVisibility);
+				emitVisionRouteStatusProgress(
+					progress,
+					formatVisionStatus("failed", strategySelection, trace, settings.requestAttribution),
+					settings.visionProcessing.chatDebugVisibility,
+					this.logger
+				);
 			}
 			this.logger.error("request.failed", {
 				model: model.id,
@@ -530,20 +535,34 @@ function toLanguageModelInfo(model: ModelConfig, settings?: ExtensionSettings): 
 
 function supportsVisionProxy(model: ModelConfig, settings?: ExtensionSettings): boolean {
 	if (!settings) {
+		const scope = model.visionProxyScope;
+		if (scope === "disabled") {
+			return false;
+		}
+		if (scope === "fixed" || scope === "custom-list" || scope === "auto") {
+			return true;
+		}
 		return model.vision ? Boolean(model.visionProxyModelId?.trim()) : model.visionProxyModelId !== null;
 	}
 	return isVisionProxyEnabledForModel(model, settings);
 }
 
 function describeVisionMode(model: ModelConfig, settings?: ExtensionSettings): string {
-	if (model.vision) {
-		return supportsVisionProxy(model, settings) ? "native + proxy" : "native";
+	const scope = model.visionProxyScope;
+	if (scope === "disabled" || model.visionProxyModelId === null) {
+		return "no";
 	}
-	if (typeof model.visionProxyModelId === "string" && model.visionProxyModelId.trim()) {
+	if (scope === "fixed" || (scope === undefined && typeof model.visionProxyModelId === "string" && model.visionProxyModelId.trim())) {
 		return "proxy (model)";
 	}
-	if (model.visionProxyModelId === null) {
-		return "no";
+	if (scope === "custom-list") {
+		return "proxy (model list)";
+	}
+	if (scope === "auto") {
+		return "proxy (model auto)";
+	}
+	if (model.vision) {
+		return supportsVisionProxy(model, settings) ? "native + proxy" : "native";
 	}
 	return settings?.visionProxy.enabled ? "proxy (global)" : "no";
 }
@@ -904,13 +923,6 @@ function reportThinking(
 		return;
 	}
 	flushThinkingDisplay(progress, state, force);
-}
-
-/** @deprecated Prefer {@link createVisionProgressReporter} batching; kept for direct one-shot reports. */
-function reportVisionProgress(progress: ResponseProgress, text: string, visible: boolean): void {
-	const reporter = createVisionProgressReporter();
-	reporter.append(text);
-	reporter.flush(progress, visible);
 }
 
 function flushThinkingDisplay(progress: ResponseProgress, state: ResponseReplayState, force: boolean): void {

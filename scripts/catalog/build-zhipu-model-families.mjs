@@ -1,7 +1,7 @@
 /**
  * Build Zhipu GLM model families from BigModel docs cards + optional live API.
  *
- * Primary source: resources/zhipu-model-cards.json (text + vision tables from model-overview).
+ * Primary source: resources/zhipu-model-cards.json (scrape via scripts/catalog/scrape-zhipu-bigmodel-docs.mjs).
  * Live merge: GET https://open.bigmodel.cn/api/paas/v4/models (ZHIPU_API_KEY) — text ids only today.
  *
  * Regenerate: node scripts/catalog/build-zhipu-model-families.mjs
@@ -36,12 +36,12 @@ const ASSIGNMENT_RULES = [
 	[/^glm-4\.5-air/, "glm-4.5-air"],
 	[/^glm-4\.5-flash/i, "glm-4.5-flash"],
 	[/^glm-4\.5/, "glm-4.5"],
-	[/^glm-4\.1v-thinking-flashx/i, "glm-4.1v-thinking"],
-	[/^glm-4\.1v-thinking-flash(?!x)/i, "glm-4.1v-thinking"],
-	[/^glm-4\.1v-thinking/i, "glm-4.1v-thinking"],
+	[/^glm-4\.1v-thinking-flashx/i, "glm-4.1v-thinking-flashx"],
+	[/^glm-4\.1v-thinking-flash(?!x)/i, "glm-4.1v-thinking-flash"],
 	[/^glm-4-long/i, "glm-4-long"],
-	[/^glm-4-flashx-250414/i, "glm-4-flashx-250414"],
-	[/^glm-4-flash-250414/i, "glm-4-flash"],
+	[/^glm-4-flashx-\d{8}$/i, "glm-4-flashx"],
+	[/^glm-4-flashx/i, "glm-4-flashx"],
+	[/^glm-4-flash-\d{8}$/i, "glm-4-flash"],
 	[/^glm-4v-flash/i, "glm-4v-flash"],
 	[/^glm-4-flash$/i, "glm-4-flash"],
 	[/^glm-4-plus/i, "glm-4-plus"],

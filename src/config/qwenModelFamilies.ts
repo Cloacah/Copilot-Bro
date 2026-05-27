@@ -280,8 +280,10 @@ export const QWEN_MODEL_FAMILIES: readonly ModelFamilyDefinition[] = [
 		"category": "qwen3.7",
 		"defaultVersionId": "qwen3.7-max",
 		"versionIds": [
+			"qwen3.7-max-preview",
 			"qwen3.7-max",
-			"qwen3.7-max-2026-05-20"
+			"qwen3.7-max-2026-05-20",
+			"qwen3.7-max-2026-05-17"
 		]
 	}
 ];

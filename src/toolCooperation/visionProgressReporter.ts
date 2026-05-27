@@ -1,10 +1,5 @@
-import {
-	createVisionDetailsText,
-	isVisionStructuredThinkingText,
-	isVisionProgressDetailsText,
-	renderVisionThinkingDetails,
-	statusMessages
-} from "./outputSemantics";
+import { formatVisionProgressForChatCollapsible, isVisionProgressDetailsText, statusMessages } from "./outputSemantics";
+import { emitVisionChatProgress } from "../visionProtocol/visionChatSurface";
 
 export const VISION_PROGRESS_THINKING_ID = "vision-status";
 
@@ -45,7 +40,7 @@ export function createVisionProgressReporter(): VisionProgressReporter {
 				return undefined;
 			}
 			const combined = chunks.join("\n\n");
-			const displayText = formatVisionProgressForChat(combined);
+			const displayText = formatVisionProgressForChatCollapsible(combined);
 			const meta = (emit ?? defaultVisionProgressEmit)(displayText, progress);
 			meta.chunkCount = chunks.length;
 			meta.combinedLength = combined.length;
@@ -54,10 +49,6 @@ export function createVisionProgressReporter(): VisionProgressReporter {
 			return meta;
 		}
 	};
-}
-
-export function formatVisionProgressForChat(text: string): string {
-	return isVisionStructuredThinkingText(text) ? text.trim() : createVisionDetailsText(text);
 }
 
 export function buildVisionProgressFlushMeta(displayText: string, usedThinkingPart: boolean): VisionProgressFlushMeta {
@@ -77,16 +68,7 @@ function defaultVisionProgressEmit(
 	displayText: string,
 	progress: { report(part: unknown): void }
 ): VisionProgressFlushMeta {
-	// eslint-disable-next-line @typescript-eslint/no-require-imports
-	const vscode = require("vscode") as typeof import("vscode");
-	const thinkingPart = (vscode as unknown as {
-		LanguageModelThinkingPart?: new (value: string, id?: string) => unknown;
-	}).LanguageModelThinkingPart;
-	if (thinkingPart) {
-		progress.report(new thinkingPart(displayText, VISION_PROGRESS_THINKING_ID));
-		return buildVisionProgressFlushMeta(displayText, true);
-	}
-	progress.report(new vscode.LanguageModelTextPart(renderVisionThinkingDetails(displayText)));
+	emitVisionChatProgress(progress as import("vscode").Progress<import("vscode").LanguageModelResponsePart>, true, displayText);
 	return buildVisionProgressFlushMeta(displayText, false);
 }
 
@@ -95,7 +77,7 @@ export function flushVisionProgressToChat(
 	combinedText: string,
 	chunkCount: number
 ): VisionProgressFlushMeta {
-	const displayText = formatVisionProgressForChat(combinedText.trim());
+	const displayText = formatVisionProgressForChatCollapsible(combinedText.trim());
 	const meta = defaultVisionProgressEmit(displayText, progress);
 	meta.chunkCount = chunkCount;
 	meta.combinedLength = combinedText.trim().length;

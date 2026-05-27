@@ -17,12 +17,13 @@ export function buildModelCapabilities(
 	settings: Pick<ExtensionSettings, "visionProxy">
 ): ModelCapabilities {
 	const proxyPolicy = resolveVisionProxyPolicy(model, settings);
+	const wrapped = isWrappedLanguageModelConfig(model);
 	return {
-		modelType: isWrappedLanguageModelConfig(model) ? "builtin" : "bro",
+		modelType: wrapped ? "builtin" : "bro",
 		nativeVision: model.vision,
 		proxyVision: proxyPolicy.enabled,
 		proxyRequired: proxyPolicy.required,
-		wrapperProxyAvailable: false,
+		wrapperProxyAvailable: wrapped && proxyPolicy.enabled,
 		textFallback: true,
 		planOnly: true,
 		toolCalling: model.toolCalling

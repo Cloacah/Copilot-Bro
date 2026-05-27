@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { resolveVisionProxyPolicy } from "../visionProxyPolicy";
 import type { ExtensionSettings, ModelConfig } from "../types";
+import { visionProxyFixture } from "./visionProxyTestFixtures";
 
 const baseModel: ModelConfig = {
 	id: "deepseek-v4-flash",
@@ -19,11 +20,7 @@ const baseModel: ModelConfig = {
 };
 
 const baseSettings: Pick<ExtensionSettings, "visionProxy"> = {
-	visionProxy: {
-		enabled: true,
-		defaultModelId: "copilot-vision",
-		customPrompt: ""
-	}
+	visionProxy: visionProxyFixture({ defaultModelId: "copilot-vision", selectionMode: "fixed" })
 };
 
 test("vision proxy policy treats self-referencing proxy as disabled", () => {

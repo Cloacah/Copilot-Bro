@@ -47,7 +47,7 @@ export const DEFAULT_VISION_PROCESSING: VisionProcessingConfig = {
 	imagePreprocess: true,
 	mlSegment: false,
 	outputVerbosity: "balanced",
-	chatDebugVisibility: true,
+	chatDebugVisibility: false,
 	tokenBudgetMode: "balanced",
 	needVisionGate: true,
 	svgDecisionPolicy: "auto",

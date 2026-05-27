@@ -188,7 +188,7 @@ test("package schema enums and bounds stay aligned with normalization rules", ()
 	assert.equal(properties["extendedModels.visionIntegrity"].properties.tileMaxPixels.minimum, 1);
 	assert.equal(properties["extendedModels.visionIntegrity"].properties.tileMaxPixels.maximum, 16777216);
 	assert.deepEqual(properties["extendedModels.visionProcessing"].properties.outputVerbosity.enum, ["conservative", "balanced", "verbose"]);
-	assert.equal(properties["extendedModels.visionProcessing"].properties.chatDebugVisibility.default, true);
+	assert.equal(properties["extendedModels.visionProcessing"].properties.chatDebugVisibility.default, false);
 	assert.deepEqual(properties["extendedModels.visionProcessing"].properties.tokenBudgetMode.enum, ["conservative", "balanced", "verbose"]);
 	assert.deepEqual(properties["extendedModels.visionProcessing"].properties.svgDecisionPolicy.enum, ["auto", "always", "never"]);
 	assert.deepEqual(properties["extendedModels.visionProcessing"].properties.rasterPolicy.enum, ["auto", "segment", "skip"]);

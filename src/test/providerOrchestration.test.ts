@@ -7,8 +7,10 @@ import {
 	createRequestTrace,
 	formatVisionStatus
 } from "../providerOrchestration";
+import { selectTool } from "../toolCooperation/toolSelector";
 import { deduplicateRefs, splitIntoBatches } from "../agentSession/batchPlanner";
 import type { ExtensionSettings, ModelConfig, RequestAttributionConfig } from "../types";
+import { visionProxyFixture } from "./visionProxyTestFixtures";
 
 const MODEL_VISION_PROXY_DISABLED = "__vision_proxy_disabled__";
 
@@ -28,11 +30,11 @@ const baseModel: ModelConfig = {
 };
 
 const baseSettings: Pick<ExtensionSettings, "visionProxy"> = {
-	visionProxy: {
-		enabled: true,
+	visionProxy: visionProxyFixture({
+		selectionMode: "fixed",
 		defaultModelId: "builtin-vision",
 		customPrompt: "describe"
-	}
+	})
 };
 
 const attributionConfig: RequestAttributionConfig = {
@@ -52,13 +54,35 @@ test("buildModelCapabilities automatically determines vision strategies", () => 
 		planOnly: true,
 		toolCalling: true
 	});
-	assert.equal(buildModelCapabilities({
+	const wrappedDisabled = buildModelCapabilities({
 		...baseModel,
 		modelSource: "vscode-lm-wrapper",
 		wrappedLanguageModelId: "copilot/gpt-4.1",
 		wrappedLanguageModelVendor: "copilot",
+		visionProxyScope: "disabled",
 		visionProxyModelId: null
-	}, baseSettings).modelType, "builtin");
+	}, baseSettings);
+	assert.equal(wrappedDisabled.modelType, "builtin");
+	assert.equal(wrappedDisabled.wrapperProxyAvailable, false);
+	assert.equal(wrappedDisabled.proxyVision, false);
+});
+
+test("buildModelCapabilities enables wrapper-proxy path for wrapped models when proxy policy is on", () => {
+	const caps = buildModelCapabilities({
+		...baseModel,
+		vision: false,
+		visionProxyScope: "inherit",
+		visionProxyModelId: undefined,
+		modelSource: "vscode-lm-wrapper",
+		wrappedLanguageModelId: "copilot/gpt-4.1",
+		wrappedLanguageModelVendor: "copilot",
+		toolCalling: true
+	}, baseSettings);
+	assert.equal(caps.modelType, "builtin");
+	assert.equal(caps.proxyVision, true);
+	assert.equal(caps.wrapperProxyAvailable, true);
+	const selection = selectTool(true, caps, { enabled: true });
+	assert.equal(selection.strategy, "wrapper-proxy");
 });
 
 test("buildModelCapabilities treats sentinel and legacy null string as explicit proxy disable", () => {

@@ -61,11 +61,18 @@ test("zhipu built-in presets expose one row per model family", () => {
 	assert.equal(glm51?.thinking, "enabled");
 	const glm5v = ZHIPU_MODEL_FAMILIES.find((family) => family.familyKey === "glm-5v-turbo");
 	assert.ok(glm5v?.vision);
-	assert.equal(glm5v?.thinking, "disabled");
-	const glm41Thinking = ZHIPU_MODEL_FAMILIES.find((family) => family.familyKey === "glm-4.1v-thinking");
-	assert.ok(glm41Thinking);
-	assert.equal(glm41Thinking?.thinking, "enabled");
-	assert.ok(glm41Thinking?.versionIds.includes("glm-4.1v-thinking-flashx"));
+	assert.equal(glm5v?.thinking, "enabled");
+	const glm41ThinkingFlashX = ZHIPU_MODEL_FAMILIES.find((family) => family.familyKey === "glm-4.1v-thinking-flashx");
+	const glm41ThinkingFlash = ZHIPU_MODEL_FAMILIES.find((family) => family.familyKey === "glm-4.1v-thinking-flash");
+	assert.ok(glm41ThinkingFlashX);
+	assert.ok(glm41ThinkingFlash);
+	assert.equal(glm41ThinkingFlashX?.thinking, "enabled");
+	assert.ok(glm41ThinkingFlashX?.versionIds.includes("glm-4.1v-thinking-flashx"));
+	assert.ok(!ZHIPU_MODEL_FAMILIES.some((family) => family.familyKey === "glm-4.1v-thinking"));
+	assert.equal(ZHIPU_MODEL_FAMILIES.find((family) => family.familyKey === "glm-4.6v")?.displayName, "GLM 4.6V");
+	assert.equal(ZHIPU_MODEL_FAMILIES.find((family) => family.familyKey === "glm-4.6v-flash")?.displayName, "GLM 4.6V Flash");
+	assert.equal(ZHIPU_MODEL_FAMILIES.find((family) => family.familyKey === "glm-4.6v-flashx")?.displayName, "GLM 4.6V FlashX");
+	assert.equal(ZHIPU_MODEL_FAMILIES.find((family) => family.familyKey === "glm-4.7-flashx")?.displayName, "GLM 4.7 FlashX");
 	for (const preset of zhipuPresets) {
 		assert.ok(preset.modelFamilyKey);
 		if (preset.vision) {

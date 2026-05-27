@@ -124,6 +124,27 @@ export const HOST_UI_SMOKE_CHAT_INTEGRATION_CANONICAL: readonly HostUiSmokeChatI
 		requiredApiKeyProviders: ["deepseek", "qwen"]
 	},
 	{
+		id: "p3-global-qwen-proxy-custom-list",
+		kind: "vision-proxy",
+		modelProfile: "deepseek.vision-proxy",
+		userPrompt:
+			"[host-ui-p3-proxy] Global vision proxy (custom-list): describe the attached small PNG in ≤12 words. Do not invent UI elements.",
+		attachMinPng: true,
+		requiredLogMarkers: [
+			"vision.proxy.chain.resolved",
+			"\"selectionMode\":\"custom-list\"",
+			"vision.proxy.selected",
+			"vision.input.bound",
+			"vision.proxy.cache.miss",
+			"vision.route.selected",
+			"vision.evidence.persisted",
+			"\"rawImageForwarded\":false",
+			"request.messages.summary",
+			"\"hasImageParts\":false"
+		],
+		requiredApiKeyProviders: ["deepseek", "qwen"]
+	},
+	{
 		id: "vision-proxy-miss",
 		kind: "vision-proxy",
 		modelProfile: "deepseek.vision-proxy",

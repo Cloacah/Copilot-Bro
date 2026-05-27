@@ -173,3 +173,16 @@ export function computeProviderRetryDelayMs(attempt: number, baseDelayMs: number
 	const exponential = baseDelayMs * 2 ** Math.max(0, attempt - 1);
 	return Math.min(exponential, maxDelayMs);
 }
+
+/** Transient overload/rate-limit — retry in-process without surfacing ProviderError to Chat. */
+export function isVisionProxyRateLimitFailure(error: unknown): boolean {
+	if (isFatalProviderFailure(error)) {
+		return false;
+	}
+	return isTransientProviderFailure(error);
+}
+
+/** Auth, balance, model missing, or other non-retryable provider faults. */
+export function isVisionProxyFatalFailure(error: unknown): boolean {
+	return isFatalProviderFailure(error);
+}

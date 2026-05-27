@@ -344,7 +344,7 @@ test("validateVisionChatProgressEvidence: requires batched thinking flush for sc
 	assert.deepEqual(validateVisionChatProgressEvidence(""), ["log.vision-chat-progress.end"]);
 	const good = [
 		'host-ui-smoke.vision-chat-progress.end {"ok":true,"toolName":"screenshot_page"}',
-		'host-ui-smoke.vision.progress.flush {"chunkCount":3,"containsVisionPrefix":true,"usedThinkingPart":true}',
+		'host-ui-smoke.vision.progress.flush {"chunkCount":3,"containsVisionPrefix":true,"usedThinkingPart":false,"hasVisionDetailsMarker":true}',
 		'vision.input.bound {"toolName":"screenshot_page","sourceKind":"tool-screenshot"}'
 	].join("\n");
 	assert.deepEqual(validateVisionChatProgressEvidence(good), []);

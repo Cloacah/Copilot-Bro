@@ -7,6 +7,32 @@ import type { ModelFamilyDefinition } from "./modelFamilyCatalog";
  */
 export const ZHIPU_MODEL_FAMILIES: readonly ModelFamilyDefinition[] = [
 	{
+		"familyKey": "glm-5",
+		"displayName": "GLM 5",
+		"category": "Flagship / Agent Coding",
+		"defaultVersionId": "glm-5",
+		"versionIds": [
+			"glm-5"
+		],
+		"temperature": 0.6,
+		"topP": 1,
+		"maxOutputTokens": 128000,
+		"thinking": "enabled"
+	},
+	{
+		"familyKey": "glm-5-turbo",
+		"displayName": "GLM 5 Turbo",
+		"category": "Flagship / Agent Coding",
+		"defaultVersionId": "glm-5-turbo",
+		"versionIds": [
+			"glm-5-turbo"
+		],
+		"temperature": 0.6,
+		"topP": 1,
+		"maxOutputTokens": 128000,
+		"thinking": "enabled"
+	},
+	{
 		"familyKey": "glm-5.1",
 		"displayName": "GLM 5.1",
 		"category": "Flagship / Agent Coding",
@@ -16,106 +42,114 @@ export const ZHIPU_MODEL_FAMILIES: readonly ModelFamilyDefinition[] = [
 		],
 		"temperature": 0.6,
 		"topP": 1,
-		"contextLength": 200000,
 		"maxOutputTokens": 128000,
 		"thinking": "enabled"
 	},
 	{
-		"familyKey": "glm-5",
-		"displayName": "GLM 5",
-		"category": "Flagship / Agent",
-		"defaultVersionId": "glm-5",
+		"familyKey": "glm-4",
+		"displayName": "GLM 4",
+		"category": "Fast / General",
+		"defaultVersionId": "glm-4-flash-250414",
 		"versionIds": [
-			"glm-5"
+			"glm-4-flash-250414",
+			"glm-4"
 		],
 		"temperature": 0.6,
 		"topP": 1,
-		"contextLength": 200000,
-		"maxOutputTokens": 128000,
-		"thinking": "enabled"
+		"thinking": "disabled"
 	},
 	{
-		"familyKey": "glm-5-turbo",
-		"displayName": "GLM 5 Turbo",
-		"category": "Flagship / Long Task",
-		"defaultVersionId": "glm-5-turbo",
+		"familyKey": "glm-4-air",
+		"displayName": "GLM 4 Air",
+		"category": "Fast / General",
+		"defaultVersionId": "glm-4-air-250414",
 		"versionIds": [
-			"glm-5-turbo"
+			"glm-4-airx",
+			"glm-4-air-250414",
+			"glm-4-air"
 		],
 		"temperature": 0.6,
 		"topP": 1,
-		"contextLength": 200000,
-		"maxOutputTokens": 128000,
-		"thinking": "enabled"
+		"maxOutputTokens": 4000,
+		"thinking": "disabled"
+	},
+	{
+		"familyKey": "glm-4-flashx",
+		"displayName": "GLM 4 FlashX",
+		"category": "Fast / General",
+		"defaultVersionId": "glm-4-flashx-250414",
+		"versionIds": [
+			"glm-4-flashx-250414",
+			"glm-4-flashx"
+		],
+		"temperature": 0.6,
+		"topP": 1,
+		"maxOutputTokens": 16000,
+		"thinking": "disabled"
+	},
+	{
+		"familyKey": "glm-4-long",
+		"displayName": "GLM 4 Long",
+		"category": "Fast / General",
+		"defaultVersionId": "glm-4-long",
+		"versionIds": [
+			"glm-4-long"
+		],
+		"temperature": 0.6,
+		"topP": 1,
+		"maxOutputTokens": 4000,
+		"thinking": "disabled"
+	},
+	{
+		"familyKey": "glm-4-plus",
+		"displayName": "GLM 4 Plus",
+		"category": "Fast / General",
+		"defaultVersionId": "glm-4-plus",
+		"versionIds": [
+			"glm-4-plus"
+		],
+		"temperature": 0.6,
+		"topP": 1,
+		"maxOutputTokens": 16000,
+		"thinking": "disabled"
 	},
 	{
 		"familyKey": "glm-4.5",
 		"displayName": "GLM 4.5",
-		"category": "Reasoning / Agent",
+		"category": "Fast / General",
 		"defaultVersionId": "glm-4.5",
 		"versionIds": [
 			"glm-4.5"
 		],
 		"temperature": 0.6,
 		"topP": 1,
-		"contextLength": 128000,
 		"maxOutputTokens": 96000,
-		"thinking": "enabled"
-	},
-	{
-		"familyKey": "glm-4.7",
-		"displayName": "GLM 4.7",
-		"category": "Reasoning / Agent",
-		"defaultVersionId": "glm-4.7",
-		"versionIds": [
-			"glm-4.7"
-		],
-		"temperature": 0.6,
-		"topP": 1,
-		"contextLength": 200000,
-		"maxOutputTokens": 128000,
-		"thinking": "enabled"
+		"thinking": "disabled"
 	},
 	{
 		"familyKey": "glm-4.6",
 		"displayName": "GLM 4.6",
-		"category": "Agent Coding",
+		"category": "Fast / General",
 		"defaultVersionId": "glm-4.6",
 		"versionIds": [
 			"glm-4.6"
 		],
 		"temperature": 0.6,
 		"topP": 1,
-		"contextLength": 200000,
 		"maxOutputTokens": 128000,
 		"thinking": "enabled"
 	},
 	{
-		"familyKey": "glm-4.5-air",
-		"displayName": "GLM 4.5 Air",
-		"category": "Fast Reasoning",
-		"defaultVersionId": "glm-4.5-air",
+		"familyKey": "glm-4.7",
+		"displayName": "GLM 4.7",
+		"category": "Fast / General",
+		"defaultVersionId": "glm-4.7",
 		"versionIds": [
-			"glm-4.5-air"
+			"glm-4.7"
 		],
 		"temperature": 0.6,
 		"topP": 1,
-		"contextLength": 128000,
-		"maxOutputTokens": 96000,
-		"thinking": "enabled"
-	},
-	{
-		"familyKey": "glm-4.5-airx",
-		"displayName": "GLM 4.5 AirX",
-		"category": "Fast Reasoning",
-		"defaultVersionId": "glm-4.5-airx",
-		"versionIds": [
-			"glm-4.5-airx"
-		],
-		"temperature": 0.6,
-		"topP": 1,
-		"contextLength": 128000,
-		"maxOutputTokens": 96000,
+		"maxOutputTokens": 128000,
 		"thinking": "disabled"
 	},
 	{
@@ -128,51 +162,20 @@ export const ZHIPU_MODEL_FAMILIES: readonly ModelFamilyDefinition[] = [
 		],
 		"temperature": 0.6,
 		"topP": 1,
-		"contextLength": 200000,
 		"maxOutputTokens": 128000,
-		"thinking": "disabled"
+		"thinking": "enabled"
 	},
 	{
-		"familyKey": "glm-4-flashx-250414",
-		"displayName": "GLM 4 FlashX",
-		"category": "Fast / Cost Efficient",
-		"defaultVersionId": "glm-4-flashx-250414",
+		"familyKey": "autoglm-phone",
+		"displayName": "AutoGLM Phone",
+		"category": "Vision / Agent Coding",
+		"defaultVersionId": "autoglm-phone",
 		"versionIds": [
-			"glm-4-flashx-250414"
-		],
-		"temperature": 0.6,
-		"topP": 1,
-		"contextLength": 128000,
-		"maxOutputTokens": 16384,
-		"thinking": "disabled"
-	},
-	{
-		"familyKey": "glm-4-long",
-		"displayName": "GLM 4 Long",
-		"category": "Ultra Long Context",
-		"defaultVersionId": "glm-4-long",
-		"versionIds": [
-			"glm-4-long"
-		],
-		"temperature": 0.6,
-		"topP": 1,
-		"contextLength": 1000000,
-		"maxOutputTokens": 4096,
-		"thinking": "disabled"
-	},
-	{
-		"familyKey": "glm-5v-turbo",
-		"displayName": "GLM 5V Turbo",
-		"category": "Vision / Multimodal Coding",
-		"defaultVersionId": "glm-5v-turbo",
-		"versionIds": [
-			"glm-5v-turbo"
+			"autoglm-phone"
 		],
 		"vision": true,
 		"temperature": 0.6,
 		"topP": 1,
-		"contextLength": 200000,
-		"maxOutputTokens": 128000,
 		"thinking": "disabled"
 	},
 	{
@@ -186,8 +189,6 @@ export const ZHIPU_MODEL_FAMILIES: readonly ModelFamilyDefinition[] = [
 		"vision": true,
 		"temperature": 0.6,
 		"topP": 1,
-		"contextLength": 128000,
-		"maxOutputTokens": 32768,
 		"thinking": "disabled"
 	},
 	{
@@ -201,41 +202,34 @@ export const ZHIPU_MODEL_FAMILIES: readonly ModelFamilyDefinition[] = [
 		"vision": true,
 		"temperature": 0.6,
 		"topP": 1,
-		"contextLength": 128000,
-		"maxOutputTokens": 32768,
 		"thinking": "enabled"
 	},
 	{
-		"familyKey": "glm-4.1v-thinking",
-		"displayName": "GLM 4.1V Thinking",
+		"familyKey": "glm-5v-turbo",
+		"displayName": "GLM 5V Turbo",
+		"category": "Vision / Agent Coding",
+		"defaultVersionId": "glm-5v-turbo",
+		"versionIds": [
+			"glm-5v-turbo"
+		],
+		"vision": true,
+		"temperature": 0.6,
+		"topP": 1,
+		"maxOutputTokens": 128000,
+		"thinking": "enabled"
+	},
+	{
+		"familyKey": "glm-4.1v-thinking-flashx",
+		"displayName": "GLM 4.1V Thinking FlashX",
 		"category": "Vision / Reasoning",
 		"defaultVersionId": "glm-4.1v-thinking-flashx",
 		"versionIds": [
-			"glm-4.1v-thinking-flashx",
-			"glm-4.1v-thinking-flash",
-			"glm-4.1v-thinking"
+			"glm-4.1v-thinking-flashx"
 		],
 		"vision": true,
 		"temperature": 0.6,
 		"topP": 1,
-		"contextLength": 64000,
-		"maxOutputTokens": 16384,
 		"thinking": "enabled"
-	},
-	{
-		"familyKey": "glm-4.5v",
-		"displayName": "GLM 4.5V",
-		"category": "Vision / Reasoning",
-		"defaultVersionId": "glm-4.5v",
-		"versionIds": [
-			"glm-4.5v"
-		],
-		"vision": true,
-		"temperature": 0.6,
-		"topP": 1,
-		"contextLength": 128000,
-		"maxOutputTokens": 32768,
-		"thinking": "disabled"
 	},
 	{
 		"familyKey": "glm-ocr",
@@ -248,23 +242,31 @@ export const ZHIPU_MODEL_FAMILIES: readonly ModelFamilyDefinition[] = [
 		"vision": true,
 		"temperature": 0.6,
 		"topP": 1,
-		"contextLength": 128000,
-		"maxOutputTokens": 8192,
 		"thinking": "disabled"
 	},
 	{
-		"familyKey": "autoglm-phone",
-		"displayName": "AutoGLM Phone",
-		"category": "Vision / Agent Framework",
-		"defaultVersionId": "autoglm-phone",
+		"familyKey": "glm-4-flash",
+		"displayName": "GLM 4 Flash",
+		"category": "Free",
+		"defaultVersionId": "glm-4-flash",
 		"versionIds": [
-			"autoglm-phone"
+			"glm-4-flash"
 		],
-		"vision": true,
 		"temperature": 0.6,
 		"topP": 1,
-		"contextLength": 20000,
-		"maxOutputTokens": 2048,
+		"thinking": "disabled"
+	},
+	{
+		"familyKey": "glm-4.5-flash",
+		"displayName": "GLM 4.5 Flash",
+		"category": "Free",
+		"defaultVersionId": "glm-4.5-flash",
+		"versionIds": [
+			"glm-4.5-flash"
+		],
+		"temperature": 0.6,
+		"topP": 1,
+		"maxOutputTokens": 96000,
 		"thinking": "disabled"
 	},
 	{
@@ -277,8 +279,20 @@ export const ZHIPU_MODEL_FAMILIES: readonly ModelFamilyDefinition[] = [
 		],
 		"temperature": 0.6,
 		"topP": 1,
-		"contextLength": 200000,
 		"maxOutputTokens": 128000,
+		"thinking": "enabled"
+	},
+	{
+		"familyKey": "glm-4.1v-thinking-flash",
+		"displayName": "GLM 4.1V Thinking Flash",
+		"category": "Free / Vision",
+		"defaultVersionId": "glm-4.1v-thinking-flash",
+		"versionIds": [
+			"glm-4.1v-thinking-flash"
+		],
+		"vision": true,
+		"temperature": 0.6,
+		"topP": 1,
 		"thinking": "enabled"
 	},
 	{
@@ -292,8 +306,6 @@ export const ZHIPU_MODEL_FAMILIES: readonly ModelFamilyDefinition[] = [
 		"vision": true,
 		"temperature": 0.6,
 		"topP": 1,
-		"contextLength": 128000,
-		"maxOutputTokens": 32768,
 		"thinking": "enabled"
 	},
 	{
@@ -307,65 +319,6 @@ export const ZHIPU_MODEL_FAMILIES: readonly ModelFamilyDefinition[] = [
 		"vision": true,
 		"temperature": 0.6,
 		"topP": 1,
-		"contextLength": 16000,
-		"maxOutputTokens": 1024,
-		"thinking": "disabled"
-	},
-	{
-		"familyKey": "glm-4.5-flash",
-		"displayName": "GLM 4.5 Flash",
-		"category": "Free (deprecated)",
-		"defaultVersionId": "glm-4.5-flash",
-		"versionIds": [
-			"glm-4.5-flash"
-		],
-		"temperature": 0.6,
-		"topP": 1,
-		"contextLength": 128000,
-		"maxOutputTokens": 96000,
-		"thinking": "enabled"
-	},
-	{
-		"familyKey": "glm-4-flash",
-		"displayName": "GLM 4 Flash",
-		"category": "Free / Cost Efficient",
-		"defaultVersionId": "glm-4-flash-250414",
-		"versionIds": [
-			"glm-4-flash-250414",
-			"glm-4-flash"
-		],
-		"temperature": 0.6,
-		"topP": 1,
-		"contextLength": 128000,
-		"maxOutputTokens": 16384,
-		"thinking": "disabled"
-	},
-	{
-		"familyKey": "glm-4-plus",
-		"displayName": "GLM 4 Plus",
-		"category": "Legacy / General",
-		"defaultVersionId": "glm-4-plus",
-		"versionIds": [
-			"glm-4-plus"
-		],
-		"temperature": 0.6,
-		"topP": 1,
-		"contextLength": 128000,
-		"maxOutputTokens": 8192,
-		"thinking": "disabled"
-	},
-	{
-		"familyKey": "glm-4-air",
-		"displayName": "GLM 4 Air",
-		"category": "Legacy / Fast",
-		"defaultVersionId": "glm-4-air",
-		"versionIds": [
-			"glm-4-air"
-		],
-		"temperature": 0.6,
-		"topP": 1,
-		"contextLength": 128000,
-		"maxOutputTokens": 8192,
 		"thinking": "disabled"
 	}
 ];

@@ -27,6 +27,7 @@ import { enrichModelsWithProviderBaseUrl, normalizeProviderCustomBaseUrls } from
 import { normalizeProviderEndpointsConfig } from "./providerEndpoints";
 export { getRuntimeModelId, isWrappedLanguageModelConfig } from "./modelIdentity";
 import { getRuntimeModelId, isWrappedLanguageModelConfig } from "./modelIdentity";
+import { resolveModelVisionProxyFields } from "./modelVisionProxy";
 import { createMergedSectionConfigReader, readMergedScopedRecord, readMergedScopedSection, readMergedScopedValue } from "./configScope";
 import { readMergedCustomModelsFromInspect } from "../ui/configPanelPersistence";
 import { normalizeModelFamilyCustomVersions } from "./modelFamilySettings";
@@ -40,7 +41,11 @@ const DEFAULT_RETRY: RetrySettings = {
 
 const DEFAULT_VISION_PROXY: VisionProxySettings = {
 	enabled: true,
+	selectionMode: "auto",
 	defaultModelId: "",
+	customModelIds: [],
+	customListMaxRetriesPerModel: 3,
+	customListMaxDelayMs: 60_000,
 	customPrompt: ""
 };
 
@@ -188,6 +193,12 @@ function normalizeModels(input: unknown[] | undefined): ModelConfig[] {
 			continue;
 		}
 
+		const visionProxyFields = resolveModelVisionProxyFields({
+			visionProxyScope: record.visionProxyScope,
+			visionProxyFixedModelId: record.visionProxyFixedModelId,
+			visionProxyCustomModelIds: record.visionProxyCustomModelIds,
+			visionProxyModelId: record.visionProxyModelId ?? record.vision_proxy_model_id
+		});
 		models.push({
 			id,
 			displayName: asString(record.displayName) || undefined,
@@ -201,7 +212,7 @@ function normalizeModels(input: unknown[] | undefined): ModelConfig[] {
 			maxOutputTokens: asPositiveNumber(record.maxOutputTokens ?? record.max_tokens, DEFAULT_MAX_OUTPUT_TOKENS),
 			maxCompletionTokens: asOptionalPositiveNumber(record.maxCompletionTokens ?? record.max_completion_tokens),
 			vision: asBoolean(record.vision, false),
-			visionProxyModelId: normalizeModelVisionProxyValue(record.visionProxyModelId ?? record.vision_proxy_model_id),
+			...visionProxyFields,
 			toolCalling: asBoolean(record.toolCalling, true),
 			temperature: asNullableNumber(record.temperature),
 			topP: asNullableNumber(record.topP ?? record.top_p),
@@ -223,12 +234,62 @@ function normalizeModels(input: unknown[] | undefined): ModelConfig[] {
 }
 
 function normalizeVisionProxy(input: Partial<VisionProxySettings> | undefined): VisionProxySettings {
+	const defaultModelId = asString(input?.defaultModelId) || DEFAULT_VISION_PROXY.defaultModelId;
+	const customModelIds = normalizeVisionProxyCustomModelIds(input?.customModelIds);
+	const selectionMode = normalizeVisionProxySelectionMode(input?.selectionMode, defaultModelId, customModelIds);
 	return {
 		enabled: input?.enabled ?? DEFAULT_VISION_PROXY.enabled,
-		defaultModelId: asString(input?.defaultModelId) || DEFAULT_VISION_PROXY.defaultModelId,
-		// Support both new (customPrompt) and old (prompt) field names for backward compatibility
-		customPrompt: asString(input?.customPrompt) || asString((input as any)?.prompt) || DEFAULT_VISION_PROXY.customPrompt
+		selectionMode,
+		defaultModelId: selectionMode === "auto" ? "" : defaultModelId,
+		customModelIds: selectionMode === "custom-list" ? customModelIds : [],
+		customListMaxRetriesPerModel: clampNumber(
+			input?.customListMaxRetriesPerModel,
+			DEFAULT_VISION_PROXY.customListMaxRetriesPerModel,
+			1,
+			10
+		),
+		customListMaxDelayMs: clampNumber(
+			input?.customListMaxDelayMs,
+			DEFAULT_VISION_PROXY.customListMaxDelayMs,
+			500,
+			120_000
+		),
+		customPrompt: asString(input?.customPrompt) || asString((input as { prompt?: unknown })?.prompt) || DEFAULT_VISION_PROXY.customPrompt
 	};
+}
+
+function normalizeVisionProxyCustomModelIds(value: unknown): string[] {
+	if (!Array.isArray(value)) {
+		return [];
+	}
+	const seen = new Set<string>();
+	const ordered: string[] = [];
+	for (const entry of value) {
+		const id = asString(entry).trim();
+		if (!id || seen.has(id)) {
+			continue;
+		}
+		seen.add(id);
+		ordered.push(id);
+	}
+	return ordered;
+}
+
+function normalizeVisionProxySelectionMode(
+	value: unknown,
+	defaultModelId: string,
+	customModelIds: readonly string[]
+): import("../types").VisionProxyModelSelectionMode {
+	if (value === "auto" || value === "fixed" || value === "custom-list") {
+		return value;
+	}
+	if (customModelIds.length > 0) {
+		return "custom-list";
+	}
+	if (defaultModelId.trim()) {
+		return "fixed";
+	}
+	return "auto";
 }
 
 function normalizePromptPresets(input: Partial<PromptPresetSettings> | undefined): PromptPresetSettings {
@@ -339,6 +400,14 @@ function normalizeConfigWriteScope(value: unknown): ConfigWriteScope {
 
 function asBoolean(value: unknown, fallback: boolean): boolean {
 	return typeof value === "boolean" ? value : fallback;
+}
+
+function clampNumber(value: unknown, fallback: number, minimum: number, maximum: number): number {
+	const numeric = Number(value);
+	if (!Number.isFinite(numeric)) {
+		return fallback;
+	}
+	return Math.min(maximum, Math.max(minimum, numeric));
 }
 
 function asPositiveNumber(value: unknown, fallback: number): number {

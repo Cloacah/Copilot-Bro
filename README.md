@@ -69,7 +69,7 @@ flowchart TD
   A[Chat 请求含图片] --> B{needVisionGate 判定需要识图?}
   B -->|否| Z[主模型直接处理文本]
   B -->|是| C{路由 strategy = proxy}
-  C --> D[解析代理模型<br/>模型级 visionProxyModelId 或全局 defaultModelId]
+  C --> D[解析代理模型<br/>模型级 Vision Proxy 选择（fixed/custom-list）或全局 defaultModelId]
   D --> E[单层代理子请求<br/>禁止再次套娃识图]
   E --> F[注入契约 + customPrompt]
   F --> G[vision.proxy.structured 或代理描述]
@@ -92,7 +92,7 @@ flowchart TD
 扩展内置以下官方 OpenAI-compatible 供应商预设。保存供应商 API Key 后，扩展会尝试调用该供应商的 `/models` 接口刷新远端模型列表；失败时保留内置预设或上次缓存，不影响启动：
 
 - DeepSeek：`deepseek-v4-pro`、`deepseek-v4-flash`
-- 智谱 / Z.AI：`glm-5.1`、`glm-5v-turbo`、`glm-4.6v`、`glm-4.5v`、`glm-4.6`、`glm-4.5`、GLM 4 系列
+- 智谱 / Z.AI：覆盖 `glm-5.1`、`glm-5v-turbo`、GLM 4/4.5/4.6/4.7 系列，以及视觉/免费变体（如 `glm-4.6v-flash` / `flashx`、`glm-4.1v-thinking-flash` / `flashx`）。**抓取来源以官方文档页为准**（见 [模型概览](https://docs.bigmodel.cn/cn/guide/start/model-overview) 与 [模型列表](https://docs.bigmodel.cn/cn/guide/models/)）。
 - MiniMax：`MiniMax-M2.7`、`MiniMax-M2.5`、`MiniMax-M2.1`、`MiniMax-M2`
 - Kimi / Moonshot：`kimi-k2.6`、`kimi-k2.5`、Moonshot V1 文本与视觉模型
 - Qwen / DashScope：Qwen commercial、coder、QwQ、math、open-source 系列
@@ -200,15 +200,19 @@ API Key 的处理规则如下：
 | Reasoning Effort | `reasoningEffort` | 如 DeepSeek 的 `high` / `max`。 |
 | **Vision Input** | `vision` | **能力标记**：API 是否接受图片。不等于代理。 |
 | 工具调用 | `toolCalling` | 是否向 Copilot 声明支持 tools。 |
-| **Vision Proxy** | `visionProxyModelId` | **路由**：留空=跟全局；`__vision_proxy_disabled__`=强制 native（有视觉时）；选模型 ID=固定代理。不能选自己。 |
+| **Vision Proxy** | `visionProxyScope` / `visionProxyFixedModelId` / `visionProxyCustomModelIds` | **路由**：继承 / 禁用 / 自动 / 固定 / 自定义列表（UI 五档）。不能选自己。旧版 `visionProxyModelId` 导入时自动迁移。 |
 
 ### 识图设置卡片 — 识图代理基础
 
 | 界面标签 | `extendedModels.visionProxy` | 说明 |
 | --- | --- | --- |
 | 识图代理自定义提示词 | `customPrompt` | 追加在强制契约之后；单独保存按钮。 |
-| 启用识图代理 | `enabled` | 仅当模型级 Vision Proxy **留空**时，无视觉模型是否允许走全局代理。 |
-| 默认代理模型 | `defaultModelId` | 留空则自动选已安装的 Copilot 视觉模型。 |
+| 启用识图代理 | `enabled` | 模型级为「继承/自动」时，无视觉模型是否允许走全局代理（默认 `true`）。 |
+| 代理选择模式 | `selectionMode` | `auto` / `fixed` / `custom-list`；与模型级 scope 语义对应。 |
+| 默认代理模型 | `defaultModelId` | `selectionMode=fixed` 时使用；`auto` 时留空则自动选 Copilot 视觉模型。 |
+| 自定义代理列表 | `customModelIds` | `selectionMode=custom-list` 时按顺序尝试（最多 2 个下拉位）。 |
+| 列表单项最大重试 | `customListMaxRetriesPerModel` | 单代理 429 等可重试错误的次数（默认 3）。 |
+| 列表重试最大延迟 | `customListMaxDelayMs` | 重试退避上限毫秒（默认 60000）。 |
 
 ### 识图设置卡片 — 识图会话调度（`visionAgent`）
 
@@ -315,20 +319,25 @@ API Key 的处理规则如下：
 | 设置 | 含义 |
 | --- | --- |
 | 模型 **Vision Input** (`vision`) | **能力**：远端 API 是否接受图片 |
-| 模型 **Vision Proxy** (`visionProxyModelId`) | **路由**：附件图片由谁做结构化识图 |
+| 模型 **Vision Proxy** (`visionProxyScope` / `visionProxyFixedModelId` / `visionProxyCustomModelIds`) | **路由**：附件图片由谁做结构化识图 |
 
 ### 模型级 Vision Proxy 取值
 
-- **禁用识图代理**（`__vision_proxy_disabled__`，历史 `null` 同等）：不走代理；若勾选 Vision Input 则走 **native**。
-- **留空（使用全局默认 / 自动）**：无视觉 → 受全局 `visionProxy.enabled` + `defaultModelId` 约束；有视觉 → 默认 **native**。
-- **指定模型 ID**：始终用该视觉模型做代理（单层，不能选自己）。
+- **继承**（`inherit`）：需要代理时沿用全局默认；自带视觉模型仍默认走 **native**（除非强制代理）。
+- **禁用**（`disabled`）：永不走代理；若勾选 Vision Input 则走 **native**。
+- **自动**（`auto`）：当需要代理时允许自动选择（主要用于无视觉模型）。
+- **固定**（`fixed`）：始终用 `visionProxyFixedModelId` 做代理（单层，不能选自己）。
+- **自定义列表**（`custom-list`）：按 `visionProxyCustomModelIds` 顺序尝试代理（单层，不能选自己）。
 
 ### 全局识图代理 `extendedModels.visionProxy`
 
 | 字段 | 说明 |
 | --- | --- |
-| `enabled` | 仅当模型级代理**留空**时，无视觉模型是否允许走代理（默认 `true`） |
-| `defaultModelId` | 全局默认代理；留空则自动选已安装的 Copilot 视觉模型 |
+| `enabled` | 模型级为 inherit/auto 时，无视觉模型是否允许代理（默认 `true`） |
+| `selectionMode` | `auto` / `fixed` / `custom-list` |
+| `defaultModelId` | `fixed` 模式的代理模型 ID；`auto` 时通常留空 |
+| `customModelIds` | `custom-list` 模式的有序 ID 列表 |
+| `customListMaxRetriesPerModel` / `customListMaxDelayMs` | 列表项 429 重试策略 |
 | `customPrompt` | 追加在 `vision-prompt-contract-v1` 之后的自定义说明 |
 
 ### 运行时行为（通俗版）
@@ -522,7 +531,7 @@ API Key 的处理规则如下：
 | visionProcessing | imagePreprocess | true | 默认开启 preprocess chain |
 | visionProcessing | mlSegment | false | 仅可选增强；主链路不依赖它 |
 | visionProcessing | outputVerbosity | balanced | 与 `tokenBudgetMode` 同义 |
-| visionProcessing | chatDebugVisibility | true | 只控制 Chat 面板内部调试/进度展示 |
+| visionProcessing | chatDebugVisibility | false | 只控制 Chat 面板内部调试/进度展示 |
 | visionProcessing | needVisionGate | true | 无视觉需求时不触发识图 |
 | visionProcessing | spatialSchemaVersion | v1 | GeometryProtocol 当前版本 |
 | modelCompatibility | mode | proxy | 可选 `native / proxy / wrapper-proxy / disabled` |
@@ -708,7 +717,7 @@ flowchart TD
   A[Chat request with images] --> B{needVisionGate says vision needed?}
   B -->|no| Z[Main model handles text only]
   B -->|yes| C{strategy = proxy}
-  C --> D[Resolve proxy model<br/>per-model visionProxyModelId or global defaultModelId]
+  C --> D[Resolve proxy model<br/>per-model Vision Proxy selection (fixed/custom-list) or global defaultModelId]
   D --> E[Single-layer proxy sub-request<br/>no nested vision]
   E --> F[Inject contract + customPrompt]
   F --> G[vision.proxy.structured or proxy description]
@@ -731,7 +740,7 @@ Log markers: `vision.proxy` events. With `visionProxy.enabled = false`, **non-vi
 The extension ships built-in presets and tries to refresh provider model lists from each provider's `/models` endpoint after an API key is saved. If refresh fails, built-in presets or the last cache remain available:
 
 - DeepSeek: `deepseek-v4-pro`, `deepseek-v4-flash`
-- Zhipu / Z.AI: `glm-5.1`, `glm-5v-turbo`, `glm-4.6v`, `glm-4.5v`, `glm-4.6`, `glm-4.5`, and GLM 4 variants
+- Zhipu / Z.AI: covers `glm-5.1`, `glm-5v-turbo`, GLM 4/4.5/4.6/4.7 families, plus vision/free variants (e.g. `glm-4.6v-flash` / `flashx`, `glm-4.1v-thinking-flash` / `flashx`). **Catalog source follows official docs pages** (see [model overview](https://docs.bigmodel.cn/cn/guide/start/model-overview) and [models](https://docs.bigmodel.cn/cn/guide/models/)).
 - MiniMax: `MiniMax-M2.7`, `MiniMax-M2.5`, `MiniMax-M2.1`, `MiniMax-M2`
 - Kimi / Moonshot: `kimi-k2.6`, `kimi-k2.5`, Moonshot V1 text and vision models
 - Qwen / DashScope: commercial, coder, QwQ, math, and open-source Qwen families
@@ -835,15 +844,19 @@ This section mirrors the settings page. Only **currently visible** controls are 
 | Reasoning effort | `reasoningEffort` | e.g. DeepSeek `high` / `max`. |
 | **Vision Input** | `vision` | **Capability**: API accepts images; not the same as proxy. |
 | Tool calling | `toolCalling` | Advertise tool support to Copilot. |
-| **Vision Proxy** | `visionProxyModelId` | **Routing**: empty = follow global; `__vision_proxy_disabled__` = force native when capable; model id = fixed proxy. Cannot pick self. |
+| **Vision Proxy** | `visionProxyScope` / `visionProxyFixedModelId` / `visionProxyCustomModelIds` | **Routing**: inherit / disabled / auto / fixed / custom list (five UI options). Cannot pick self. Legacy `visionProxyModelId` migrates on import. |
 
 ### Vision Settings — proxy basics
 
 | UI label | `extendedModels.visionProxy` | Meaning |
 | --- | --- | --- |
 | Custom proxy prompt | `customPrompt` | Appended after the mandatory contract; separate save. |
-| Enable vision proxy | `enabled` | When model-level proxy is **empty**, allow global proxy for non-vision models. |
-| Default proxy model | `defaultModelId` | Empty = auto-pick an installed Copilot vision model. |
+| Enable vision proxy | `enabled` | When model-level proxy is inherit/auto, allow global proxy for non-vision models (default `true`). |
+| Proxy selection mode | `selectionMode` | `auto` / `fixed` / `custom-list`; mirrors per-model scope semantics. |
+| Default proxy model | `defaultModelId` | Used when `selectionMode=fixed`; empty under `auto` = auto-pick Copilot vision model. |
+| Custom proxy list | `customModelIds` | Ordered fallbacks when `selectionMode=custom-list` (up to two picker slots). |
+| Max retries per list item | `customListMaxRetriesPerModel` | Retries per proxy on rate-limit-like errors (default 3). |
+| Max retry delay (ms) | `customListMaxDelayMs` | Backoff cap for list retries (default 60000). |
 
 ### Vision Settings — session orchestration (`visionAgent`)
 
@@ -949,20 +962,25 @@ See [High-Fidelity Vision Flow](#high-fidelity-vision-flow) for diagrams and [Vi
 | Setting | Meaning |
 | --- | --- |
 | Model **Vision Input** (`vision`) | **Capability**: whether the remote API accepts images |
-| Model **Vision Proxy** (`visionProxyModelId`) | **Routing**: who runs structured vision on attachments |
+| Model **Vision Proxy** (`visionProxyScope` / `visionProxyFixedModelId` / `visionProxyCustomModelIds`) | **Routing**: who runs structured vision on attachments |
 
-### Per-model `visionProxyModelId`
+### Per-model Vision Proxy selection
 
-- **Disable vision proxy** (`__vision_proxy_disabled__`, legacy `null`): no proxy; with Vision Input enabled → **native**.
-- **Empty (use global / auto)**: non-vision models follow global `visionProxy`; vision models default to **native**.
-- **Model id**: always proxy through that vision model (single layer; cannot select self).
+- **Inherit** (`inherit`): use global defaults when proxying is needed; native vision models still default to **native** unless you force proxy.
+- **Disabled** (`disabled`): never proxy; with Vision Input enabled → **native**.
+- **Auto** (`auto`): allow auto selection when proxy is required (mainly for non-vision models).
+- **Fixed** (`fixed`): proxy through `visionProxyFixedModelId` (single layer; cannot select self).
+- **Custom list** (`custom-list`): proxy through `visionProxyCustomModelIds` in order (single layer; cannot select self).
 
 ### Global `extendedModels.visionProxy`
 
 | Field | Meaning |
 | --- | --- |
-| `enabled` | When model-level proxy is **empty**, allow proxy for non-vision models (default `true`) |
-| `defaultModelId` | Global default proxy; empty = auto-pick Copilot vision model |
+| `enabled` | For inherit/auto model scope, allow proxy on non-vision models (default `true`) |
+| `selectionMode` | `auto` / `fixed` / `custom-list` |
+| `defaultModelId` | Proxy id for `fixed`; usually empty under `auto` |
+| `customModelIds` | Ordered ids for `custom-list` |
+| `customListMaxRetriesPerModel` / `customListMaxDelayMs` | Per-list-item retry on rate limits |
 | `customPrompt` | Extra instructions after `vision-prompt-contract-v1` |
 
 ### Runtime (plain language)
@@ -1135,7 +1153,7 @@ These defaults are sealed by `src/config/contractConfig.ts` and should match run
 | visionProcessing | imagePreprocess | true | enabled by default |
 | visionProcessing | mlSegment | false | optional enhancement only |
 | visionProcessing | outputVerbosity | balanced | alias of `tokenBudgetMode` |
-| visionProcessing | chatDebugVisibility | true | chat-panel-only internal debug visibility |
+| visionProcessing | chatDebugVisibility | false | chat-panel-only internal debug visibility |
 | visionProcessing | needVisionGate | true | do not trigger vision unless needed |
 | visionProcessing | spatialSchemaVersion | v1 | current GeometryProtocol version |
 | modelCompatibility | mode | proxy | `native / proxy / wrapper-proxy / disabled` |

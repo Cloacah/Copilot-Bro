@@ -8,7 +8,17 @@
 npm run catalog:zhipu
 ```
 
-Reads `resources/zhipu-model-cards.json` (curated from [model overview](https://docs.bigmodel.cn/cn/guide/start/model-overview)) and writes:
+**Refresh cards from BigModel guide pages (text / vlm / free):**
+
+```bash
+npm run catalog:zhipu:scrape
+npm run catalog:zhipu
+npm run catalog:verify
+```
+
+`catalog:zhipu:scrape` fetches [llms.txt](https://docs.bigmodel.cn/llms.txt) plus [model-overview](https://docs.bigmodel.cn/cn/guide/start/model-overview) links, opens each guide page, and extracts API `model=` samples and hub `<Tab title="GLM-...">` variants (e.g. GLM-4.1V-Thinking → FlashX/Flash only). Writes `resources/zhipu-model-cards.json`.
+
+Reads `resources/zhipu-model-cards.json` and writes:
 
 - `resources/zhipu-bigmodel-model-catalog.json`
 - `src/config/zhipuModelFamilies.ts`
@@ -23,7 +33,7 @@ Also calls `GET https://open.bigmodel.cn/api/paas/v4/models` and merges any retu
 
 The public models API is **text-oriented** and may omit vision-only ids; vision families therefore stay anchored on `zhipu-model-cards.json`. For a fully current list:
 
-1. Update `resources/zhipu-model-cards.json` from BigModel docs (text + vision tables).
+1. Run `npm run catalog:zhipu:scrape` (or hand-edit `resources/zhipu-model-cards.json`).
 2. Run `ZHIPU_API_KEY=... npm run catalog:zhipu` to merge live ids.
 3. Run `npm run catalog:verify` before commit.
 

@@ -11,9 +11,10 @@ import {
 	resolveHostUiSmokeChatIntegrationScenarios
 } from "../e2e/hostUi/chat/integration";
 import type { ExtensionSettings, ModelConfig } from "../types";
+import { visionProxyFixture } from "./visionProxyTestFixtures";
 
 const baseSettings: Pick<ExtensionSettings, "visionProxy"> = {
-	visionProxy: { enabled: true, defaultModelId: "copilot-vision", customPrompt: "" }
+	visionProxy: visionProxyFixture({ defaultModelId: "copilot-vision", selectionMode: "fixed" })
 };
 
 const flashModel: ModelConfig = {

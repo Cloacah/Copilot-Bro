@@ -333,13 +333,35 @@
 								"default": false,
 								"description": "Whether the model itself accepts image input natively. This only describes the model's own capability."
 							},
+							"visionProxyScope": {
+								"type": "string",
+								"enum": [
+									"inherit",
+									"disabled",
+									"auto",
+									"fixed",
+									"custom-list"
+								],
+								"description": "Per-model vision proxy scope. inherit follows global visionProxy; disabled turns proxy off; auto/fixed/custom-list override global selection for this model."
+							},
+							"visionProxyFixedModelId": {
+								"type": "string",
+								"description": "Fixed proxy model ID when visionProxyScope is fixed."
+							},
+							"visionProxyCustomModelIds": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								},
+								"description": "Ordered proxy model IDs when visionProxyScope is custom-list."
+							},
 							"visionProxyModelId": {
 								"type": [
 									"string",
 									"null"
 								],
 								"default": "",
-								"description": "Controls this model's vision proxy behavior. Empty uses global vision proxy settings, \"__vision_proxy_disabled__\" (or null for backward compatibility) disables proxying for this model, and a model ID forces that proxy model."
+								"description": "Legacy alias for vision proxy routing. Prefer visionProxyScope. Empty uses global vision proxy settings, \"__vision_proxy_disabled__\" (or null) disables proxying, and a model ID forces that proxy model."
 							},
 							"toolCalling": {
 								"type": "boolean",
@@ -470,7 +492,11 @@
 					"type": "object",
 					"default": {
 						"enabled": true,
+						"selectionMode": "auto",
 						"defaultModelId": "",
+						"customModelIds": [],
+						"customListMaxRetriesPerModel": 3,
+						"customListMaxDelayMs": 60000,
 						"customPrompt": ""
 					},
 					"description": "Global vision proxy settings. Models whose visionProxyModelId is empty can use another image-capable model, including built-in Copilot models, to describe images before the current model continues.",
@@ -480,10 +506,32 @@
 							"default": true,
 							"description": "Enable the global vision proxy for models whose visionProxyModelId is empty."
 						},
+						"selectionMode": {
+							"type": "string",
+							"enum": ["auto", "fixed", "custom-list"],
+							"default": "auto",
+							"description": "How to pick vision proxy models: auto-pick, fixed defaultModelId, or ordered customModelIds."
+						},
 						"defaultModelId": {
 							"type": "string",
 							"default": "",
-							"description": "Preferred vision-capable model ID. Leave empty to auto-pick an installed image-capable Copilot model."
+							"description": "Fixed vision-capable model ID when selectionMode is fixed."
+						},
+						"customModelIds": {
+							"type": "array",
+							"items": { "type": "string" },
+							"default": [],
+							"description": "Ordered vision proxy model IDs when selectionMode is custom-list."
+						},
+						"customListMaxRetriesPerModel": {
+							"type": "number",
+							"default": 3,
+							"description": "Per-model retry attempts on transient rate limits before switching to the next custom-list entry."
+						},
+						"customListMaxDelayMs": {
+							"type": "number",
+							"default": 60000,
+							"description": "Maximum backoff delay (ms) between proxy retries on the same model."
 						},
 						"customPrompt": {
 							"type": "string",
@@ -679,7 +727,7 @@
 						"imagePreprocess": true,
 						"mlSegment": false,
 						"outputVerbosity": "balanced",
-						"chatDebugVisibility": true,
+						"chatDebugVisibility": false,
 						"tokenBudgetMode": "balanced",
 						"needVisionGate": true,
 						"svgDecisionPolicy": "auto",
@@ -717,7 +765,7 @@
 						},
 						"chatDebugVisibility": {
 							"type": "boolean",
-							"default": true,
+							"default": false,
 							"description": "Show internal vision/debug progress markers in the chat panel only. 仅控制 Chat 面板中的内部视觉/调试进度展示。"
 						},
 						"tokenBudgetMode": {
@@ -853,6 +901,7 @@
 		"readme:check": "npm run compile && node scripts/readme/generate-readme.mjs --check",
 		"readme:parity": "node scripts/readme/readme-section-parity.mjs",
 		"catalog:qwen": "node scripts/catalog/build-qwen-model-families.mjs",
+		"catalog:zhipu:scrape": "node scripts/catalog/scrape-zhipu-bigmodel-docs.mjs",
 		"catalog:zhipu": "node scripts/catalog/build-zhipu-model-families.mjs",
 		"catalog:zhipu:live": "node scripts/catalog/build-zhipu-model-families.mjs",
 		"catalog:kimi": "node scripts/catalog/build-kimi-model-families.mjs",

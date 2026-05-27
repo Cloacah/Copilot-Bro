@@ -320,6 +320,15 @@ export interface HostUiSmokeQwenCatalogUiEvidence {
 	defaultVersionId: string;
 }
 
+export interface HostUiSmokeVisionProxyUiEvidence {
+	enabled: boolean;
+	selectionMode: string;
+	customModelIds: readonly string[];
+	persistedSelectionMode?: string;
+	persistedCustomModelIds?: readonly string[];
+	savedViaBaseButton?: boolean;
+}
+
 /** @deprecated Use {@link QWEN_HOST_UI_CONTRACT} from `qwenCatalogContract` (kept for external grep stability). */
 export const HOST_UI_SMOKE_QWEN_FAMILY_COUNT = QWEN_HOST_UI_CONTRACT.familyCount;
 /** @deprecated Use {@link QWEN_HOST_UI_CONTRACT}. */
@@ -388,7 +397,8 @@ export function validateHostUiSmokeApiKeyEvidence(logText: string): string[] {
 export function assertHostUiSmokeConfigPanelEvidence(
 	endpointUi: HostUiSmokeProviderEndpointUiEvidence | undefined,
 	modelVersionUi?: HostUiSmokeModelVersionUiEvidence,
-	qwenCatalogUi?: HostUiSmokeQwenCatalogUiEvidence
+	qwenCatalogUi?: HostUiSmokeQwenCatalogUiEvidence,
+	visionProxyUi?: HostUiSmokeVisionProxyUiEvidence
 ): void {
 	if (!endpointUi) {
 		throw new Error("config panel smoke must include providerEndpointUi evidence");
@@ -431,6 +441,20 @@ export function assertHostUiSmokeConfigPanelEvidence(
 		}
 		if (qwenCatalogUi.defaultVersionId !== QWEN_HOST_UI_CONTRACT.vlOpenSourceDefaultVersionId) {
 			throw new Error(`default qwen3-vl version must be ${QWEN_HOST_UI_CONTRACT.vlOpenSourceDefaultVersionId}`);
+		}
+	}
+	if (visionProxyUi) {
+		if (visionProxyUi.selectionMode !== "custom-list") {
+			throw new Error(`visionProxy selectionMode must be custom-list, got ${visionProxyUi.selectionMode}`);
+		}
+		if (!visionProxyUi.customModelIds || visionProxyUi.customModelIds.length < 1) {
+			throw new Error("visionProxy customModelIds must include at least one entry");
+		}
+		if (visionProxyUi.persistedSelectionMode && visionProxyUi.persistedSelectionMode !== "custom-list") {
+			throw new Error(`visionProxy persisted selectionMode must be custom-list, got ${visionProxyUi.persistedSelectionMode}`);
+		}
+		if (visionProxyUi.persistedCustomModelIds && visionProxyUi.persistedCustomModelIds.length < 1) {
+			throw new Error("visionProxy persisted customModelIds must include at least one entry");
 		}
 	}
 }

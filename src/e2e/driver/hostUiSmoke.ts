@@ -385,7 +385,8 @@ async function main(): Promise<void> {
 				const endpointUi = configSmokeResult.providerEndpointUi;
 				const modelVersionUi = configSmokeResult.modelVersionUi;
 				const qwenCatalogUi = configSmokeResult.qwenCatalogUi;
-				assertHostUiSmokeConfigPanelEvidence(endpointUi, modelVersionUi, qwenCatalogUi);
+				const visionProxyUi = configSmokeResult.visionProxyUi;
+				assertHostUiSmokeConfigPanelEvidence(endpointUi, modelVersionUi, qwenCatalogUi, visionProxyUi);
 				console.log("[host-ui-smoke.config-panel] provider endpoint UI passed", {
 					profileId: endpointUi?.profileId,
 					baseUrlAfter: endpointUi?.baseUrlAfter,
@@ -394,6 +395,7 @@ async function main(): Promise<void> {
 				});
 				console.log("[host-ui-smoke.config-panel] model version UI passed", modelVersionUi);
 				console.log("[host-ui-smoke.config-panel] qwen catalog UI passed", qwenCatalogUi);
+				console.log("[host-ui-smoke.config-panel] vision proxy UI passed", visionProxyUi);
 				screenshots.push(await captureWindowScreenshot(configPanelWindow, artifactsDir, "config-panel-restored.png"));
 				screenshots.push(await captureWindowScreenshot(configPanelWindow, artifactsDir, "config-panel-qwen-endpoint.png"));
 				screenshots.push(await captureWindowScreenshot(configPanelWindow, artifactsDir, "config-panel-qwen-model-version.png"));
@@ -416,10 +418,12 @@ async function main(): Promise<void> {
 			assert.ok(logText.includes("host-ui-smoke.config.endpoint.ui"), "missing host-ui-smoke.config.endpoint.ui log");
 			assert.ok(logText.includes("host-ui-smoke.config.model-version.ui"), "missing host-ui-smoke.config.model-version.ui log");
 			assert.ok(logText.includes("host-ui-smoke.config.qwen-catalog.ui"), "missing host-ui-smoke.config.qwen-catalog.ui log");
+			assert.ok(logText.includes("host-ui-smoke.config.vision-proxy.ui"), "missing host-ui-smoke.config.vision-proxy.ui log");
 			assert.ok(logText.includes("dashscope-cn"), "provider endpoint UI must persist dashscope-cn");
 			assert.ok(logText.includes(QWEN_HOST_UI_CONTRACT.qwen3MaxDefaultVersionId), "model version UI must select Qwen3-Max catalog default");
 			assert.ok(logText.includes(QWEN_HOST_UI_CONTRACT.vlOpenSourceFamilyKey), "qwen catalog UI must include qwen3-vl-open-source family");
 			assert.ok(logText.includes(QWEN_HOST_UI_CONTRACT.vlOpenSourceDefaultVersionId), "qwen catalog UI must select default VL version");
+			assert.ok(logText.includes("\"selectionMode\":\"custom-list\"") || logText.includes("\"persistedSelectionMode\":\"custom-list\""), "vision proxy UI must persist custom-list selectionMode");
 			assert.equal(summary.configPanelSmoke, "passed", summary.configPanelSmokeError);
 			console.log("[host-ui-smoke] config-panel-only E2E completed with provider endpoint UI evidence");
 			summary.status = "passed";

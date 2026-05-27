@@ -129,7 +129,8 @@ test("formatVisionStructuredThinkingBlock embeds escaped JSON in details without
 		sourceKind: "tool-screenshot",
 		toolName: "screenshot_page"
 	});
-	assert.match(block, /structured evidence/u);
+	assert.match(block, /data-extended-models-vision-structured/u);
+	assert.match(block, /识图 · 结构化/u);
 	assert.match(block, /screenshot_page/u);
 	assert.match(block, /data-extended-models-vision-structured/u);
 	assert.match(block, /vision-proxy-contract-v3/u);

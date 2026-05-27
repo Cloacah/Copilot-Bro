@@ -49,6 +49,10 @@ export interface ModelConfig {
 	maxOutputTokens: number;
 	maxCompletionTokens?: number;
 	vision: boolean;
+	/** inherit = use global visionProxy; disabled = no proxy for this model. */
+	visionProxyScope?: "inherit" | "disabled" | "auto" | "fixed" | "custom-list";
+	visionProxyFixedModelId?: string;
+	visionProxyCustomModelIds?: readonly string[];
 	visionProxyModelId?: string | null;
 	toolCalling: boolean;
 	temperature?: number | null;
@@ -68,9 +72,15 @@ export interface ModelConfig {
 	builtIn?: boolean;
 }
 
+export type VisionProxyModelSelectionMode = "auto" | "fixed" | "custom-list";
+
 export interface VisionProxySettings {
 	enabled: boolean;
+	selectionMode: VisionProxyModelSelectionMode;
 	defaultModelId: string;
+	customModelIds: readonly string[];
+	customListMaxRetriesPerModel: number;
+	customListMaxDelayMs: number;
 	customPrompt: string;
 }
 

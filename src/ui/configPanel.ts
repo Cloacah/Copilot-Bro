@@ -230,8 +230,22 @@ export class ConfigPanel {
 				await saveVisionProxyPrompt((message as { prompt?: unknown }).prompt, payload.configWriteScope);
 				await panel.webview.postMessage({ command: "savedVisionProxyPrompt" });
 			} else if (command === "saveVisionProxyBase") {
+				const requestId = (message as { requestId?: unknown }).requestId;
+				const hostUiSmoke = (message as { hostUiSmoke?: unknown }).hostUiSmoke === true;
 				await saveVisionProxyBase((message as { visionProxy?: unknown }).visionProxy, payload.configWriteScope);
 				await panel.webview.postMessage({ command: "savedVisionProxyBase" });
+				if (hostUiSmoke && isHostUiSmokeMode() && typeof requestId === "number") {
+					const configuration = vscode.workspace.getConfiguration("extendedModels");
+					const persisted = configuration.get("visionProxy") as Record<string, unknown> | undefined;
+					const persistedSelectionMode = typeof persisted?.selectionMode === "string" ? persisted.selectionMode : "";
+					const persistedCustomModelIds = Array.isArray(persisted?.customModelIds) ? persisted?.customModelIds : [];
+					await panel.webview.postMessage({
+						command: "visionProxyBaseSaved",
+						requestId,
+						persistedSelectionMode,
+						persistedCustomModelIds
+					});
+				}
 			} else if (command === "savePhase1Section") {
 				const sectionKey = (message as { sectionKey?: unknown }).sectionKey;
 				const value = (message as { value?: unknown }).value;
@@ -622,14 +636,29 @@ async function saveVisionProxyBase(value: unknown, scope: unknown): Promise<void
 	const record = value as Record<string, unknown>;
 	const config = vscode.workspace.getConfiguration("extendedModels");
 	const defaultScope = normalizeConfigWritePreference(scope);
+	const selectionMode = record.selectionMode === "fixed" || record.selectionMode === "custom-list"
+		? record.selectionMode
+		: "auto";
+	const customModelIds = Array.isArray(record.customModelIds)
+		? record.customModelIds.map((entry) => String(entry).trim()).filter(Boolean)
+		: [];
+	if (selectionMode === "custom-list" && customModelIds.length === 0) {
+		vscode.window.showErrorMessage("Custom vision proxy list must include at least one model.");
+		return;
+	}
 	await writeScopedSectionField(config, "visionProxy", "enabled", record.enabled === true, defaultScope);
+	await writeScopedSectionField(config, "visionProxy", "selectionMode", selectionMode, defaultScope);
 	await writeScopedSectionField(
 		config,
 		"visionProxy",
 		"defaultModelId",
-		typeof record.defaultModelId === "string" ? record.defaultModelId.trim() : "",
+		selectionMode === "fixed" && typeof record.defaultModelId === "string" ? record.defaultModelId.trim() : "",
 		defaultScope
 	);
+	await writeScopedSectionField(config, "visionProxy", "customModelIds", selectionMode === "custom-list" ? customModelIds : [], defaultScope);
+	if (typeof record.customListMaxRetriesPerModel === "number") {
+		await writeScopedSectionField(config, "visionProxy", "customListMaxRetriesPerModel", record.customListMaxRetriesPerModel, defaultScope);
+	}
 	vscode.window.showInformationMessage("Saved Copilot Bro vision proxy base settings.");
 }
 
@@ -741,6 +770,9 @@ async function renderHtml(webview: vscode.Webview, context: vscode.ExtensionCont
 		maxOutputTokens: preset.maxOutputTokens,
 		toolCalling: preset.toolCalling,
 		vision: preset.vision,
+		visionProxyScope: preset.visionProxyScope,
+		visionProxyFixedModelId: preset.visionProxyFixedModelId,
+		visionProxyCustomModelIds: preset.visionProxyCustomModelIds,
 		visionProxyModelId: preset.visionProxyModelId,
 		temperature: preset.temperature,
 		topP: preset.topP,
@@ -830,6 +862,11 @@ async function renderHtml(webview: vscode.Webview, context: vscode.ExtensionCont
 		.provider-base-url-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0 8px; }
 		.provider-base-url-row input { flex: 1 1 200px; min-width: 0; margin: 0; }
 		.provider-base-url-row button { margin: 0; flex: 0 0 auto; }
+		.vision-proxy-custom-list { display: flex; flex-direction: column; gap: 6px; width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
+		.vision-proxy-custom-list-row { display: flex; gap: 8px; align-items: center; width: 100%; min-width: 0; box-sizing: border-box; margin-bottom: 6px; }
+		.vision-proxy-custom-list-row select { flex: 1 1 0; min-width: 0; max-width: 100%; margin: 0; }
+		.vision-proxy-custom-list-row .secondary { flex: 0 0 auto; }
+		.editor-pane .grid > div { min-width: 0; }
 		@media (max-width: 1200px) {
 			.editor-layout { grid-template-columns: 1fr; }
 		}
@@ -961,8 +998,25 @@ async function renderHtml(webview: vscode.Webview, context: vscode.ExtensionCont
 						<label class="check" title="${escapeHtml(text.toolCallingTip)}"><input id="toolCalling" type="checkbox" title="${escapeHtml(text.toolCallingTip)}"> ${escapeHtml(text.toolCalling)}</label>
 					</div>
 					<div>
-						<label for="visionProxyModelId" title="${escapeHtml(text.modelVisionProxyTip)}">${escapeHtml(text.modelVisionProxy)}</label>
-						<select id="visionProxyModelId" title="${escapeHtml(text.modelVisionProxyTip)}"></select>
+						<label for="modelVisionProxySelectionMode" title="${escapeHtml(text.modelVisionProxySelectionModeTip)}">${escapeHtml(text.modelVisionProxy)}</label>
+						<select id="modelVisionProxySelectionMode" title="${escapeHtml(text.modelVisionProxySelectionModeTip)}">
+							<option value="inherit">${escapeHtml(text.modelVisionProxyModeInherit)}</option>
+							<option value="disabled">${escapeHtml(text.visionProxyDisabled)}</option>
+							<option value="auto">${escapeHtml(text.visionProxyModeAuto)}</option>
+							<option value="fixed">${escapeHtml(text.visionProxyModeFixed)}</option>
+							<option value="custom-list">${escapeHtml(text.visionProxyModeCustomList)}</option>
+						</select>
+						<div id="modelVisionProxyFixedRow" style="display:none">
+							<label for="modelVisionProxyDefault" title="${escapeHtml(text.visionProxyDefaultTip)}">${escapeHtml(text.modelVisionProxyFixedLabel)}</label>
+							<select id="modelVisionProxyDefault" title="${escapeHtml(text.visionProxyDefaultTip)}"></select>
+						</div>
+						<div id="modelVisionProxyCustomListRow" style="display:none">
+							<p class="muted small">${escapeHtml(text.visionProxyCustomListHelp)}</p>
+							<div id="modelVisionProxyCustomList" class="vision-proxy-custom-list"></div>
+							<div class="row-actions" style="margin-top:8px;display:flex;gap:8px;align-items:center">
+								<button type="button" id="modelVisionProxyCustomListAdd" class="secondary" title="${escapeHtml(text.visionProxyCustomListAddTip)}">+ ${escapeHtml(text.visionProxyCustomListAdd)}</button>
+							</div>
+						</div>
 					</div>
 				</div>
 				<button id="save" title="${escapeHtml(text.saveTip)}">${escapeHtml(text.save)}</button>
@@ -984,8 +1038,23 @@ async function renderHtml(webview: vscode.Webview, context: vscode.ExtensionCont
 		<h3 style="margin:0 0 4px">${escapeHtml(text.visionProxy)}</h3>
 		<p class="muted small">${escapeHtml(text.visionProxyHelp)}</p>
 		<label class="check" title="${escapeHtml(text.visionProxyEnabledTip)}"><input id="visionProxyEnabled" type="checkbox" ${settings.visionProxy.enabled ? "checked" : ""}> ${escapeHtml(text.visionProxyEnabled)}</label>
-		<label for="visionProxyDefault" title="${escapeHtml(text.visionProxyDefaultTip)}">${escapeHtml(text.visionProxyDefault)}</label>
-		<select id="visionProxyDefault" title="${escapeHtml(text.visionProxyDefaultTip)}"></select>
+		<label for="visionProxySelectionMode" title="${escapeHtml(text.visionProxySelectionModeTip)}">${escapeHtml(text.visionProxySelectionMode)}</label>
+		<select id="visionProxySelectionMode" title="${escapeHtml(text.visionProxySelectionModeTip)}">
+			<option value="auto" ${settings.visionProxy.selectionMode === "auto" ? "selected" : ""}>${escapeHtml(text.visionProxyModeAuto)}</option>
+			<option value="fixed" ${settings.visionProxy.selectionMode === "fixed" ? "selected" : ""}>${escapeHtml(text.visionProxyModeFixed)}</option>
+			<option value="custom-list" ${settings.visionProxy.selectionMode === "custom-list" ? "selected" : ""}>${escapeHtml(text.visionProxyModeCustomList)}</option>
+		</select>
+		<div id="visionProxyFixedRow">
+			<label for="visionProxyDefault" title="${escapeHtml(text.visionProxyDefaultTip)}">${escapeHtml(text.visionProxyDefault)}</label>
+			<select id="visionProxyDefault" title="${escapeHtml(text.visionProxyDefaultTip)}"></select>
+		</div>
+		<div id="visionProxyCustomListRow" style="display:none">
+			<p class="muted small">${escapeHtml(text.visionProxyCustomListHelp)}</p>
+			<div id="visionProxyCustomList" class="vision-proxy-custom-list"></div>
+			<div class="row-actions" style="margin-top:8px;display:flex;gap:8px;align-items:center">
+				<button type="button" id="visionProxyCustomListAdd" class="secondary" title="${escapeHtml(text.visionProxyCustomListAddTip)}">+ ${escapeHtml(text.visionProxyCustomListAdd)}</button>
+			</div>
+		</div>
 		<button id="saveVisionProxyBase" title="${escapeHtml(text.saveVisionProxyBaseTip)}">${escapeHtml(text.saveVisionProxyBase)}</button>
 		<div id="visionProxyStatus" class="muted small" aria-live="polite"></div>
 		<hr style="margin:16px 0;border-color:var(--vscode-panel-border)">
@@ -1024,6 +1093,8 @@ async function renderHtml(webview: vscode.Webview, context: vscode.ExtensionCont
 		const phase1Sections = ${JSON.stringify(phase1Sections)};
 		const visionProxyCandidates = ${JSON.stringify(visionProxyCandidates)};
 		const configuredVisionProxyDefault = ${JSON.stringify(settings.visionProxy.defaultModelId)};
+		const configuredVisionProxySelectionMode = ${JSON.stringify(settings.visionProxy.selectionMode ?? "auto")};
+		const configuredVisionProxyCustomList = ${JSON.stringify(settings.visionProxy.customModelIds ?? [])};
 		const configuredWriteScope = ${JSON.stringify(settings.configWriteScope)};
 		const initialSelection = ${JSON.stringify(initialSelection)};
 		const endpointCatalog = ${JSON.stringify(endpointCatalog)};
@@ -1121,6 +1192,157 @@ async function renderHtml(webview: vscode.Webview, context: vscode.ExtensionCont
 				return "${escapeJs(MODEL_VISION_PROXY_DISABLED)}";
 			}
 			return value || undefined;
+		}
+		function modelVisionProxyScopeFromPreset(m) {
+			if (m.visionProxyScope) {
+				return m.visionProxyScope;
+			}
+			if (m.visionProxyModelId === null) {
+				return "disabled";
+			}
+			if (typeof m.visionProxyModelId === "string" && m.visionProxyModelId.trim()) {
+				return "fixed";
+			}
+			return "inherit";
+		}
+		function syncModelVisionProxyModeUi() {
+			const mode = $("modelVisionProxySelectionMode")?.value || "inherit";
+			const fixedRow = $("modelVisionProxyFixedRow");
+			const listRow = $("modelVisionProxyCustomListRow");
+			if (fixedRow) {
+				fixedRow.style.display = mode === "fixed" ? "" : "none";
+			}
+			if (listRow) {
+				listRow.style.display = mode === "custom-list" ? "" : "none";
+			}
+		}
+		function renderModelVisionProxyCustomListRows(ids) {
+			const host = $("modelVisionProxyCustomList");
+			if (!host) {
+				return;
+			}
+			host.innerHTML = "";
+			const rows = Array.isArray(ids) && ids.length > 0 ? ids : [""];
+			const m = currentPreset();
+			const selfId = m ? m.id : "";
+			rows.forEach((modelId, index) => {
+				const row = document.createElement("div");
+				row.className = "vision-proxy-custom-list-row";
+				const up = document.createElement("button");
+				up.type = "button";
+				up.className = "secondary";
+				up.textContent = "↑";
+				up.title = "${escapeJs(text.visionProxyCustomListMoveUpTip)}";
+				up.disabled = index === 0;
+				up.addEventListener("click", () => {
+					if (index === 0) {
+						return;
+					}
+					const next = modelVisionProxyCustomListRowValues();
+					[next[index - 1], next[index]] = [next[index], next[index - 1]];
+					renderModelVisionProxyCustomListRows(next);
+				});
+				const down = document.createElement("button");
+				down.type = "button";
+				down.className = "secondary";
+				down.textContent = "↓";
+				down.title = "${escapeJs(text.visionProxyCustomListMoveDownTip)}";
+				down.disabled = index >= rows.length - 1;
+				down.addEventListener("click", () => {
+					if (index >= rows.length - 1) {
+						return;
+					}
+					const next = modelVisionProxyCustomListRowValues();
+					[next[index], next[index + 1]] = [next[index + 1], next[index]];
+					renderModelVisionProxyCustomListRows(next);
+				});
+				const select = document.createElement("select");
+				renderVisionProxyOptions(select, modelId, { selfId, allowDisable: false });
+				const remove = document.createElement("button");
+				remove.type = "button";
+				remove.className = "secondary";
+				remove.textContent = "×";
+				remove.title = "${escapeJs(text.visionProxyCustomListRemoveTip)}";
+				remove.addEventListener("click", () => {
+					const next = modelVisionProxyCustomListRowValues().filter((_, i) => i !== index);
+					renderModelVisionProxyCustomListRows(next.length > 0 ? next : [""]);
+				});
+				row.appendChild(up);
+				row.appendChild(down);
+				row.appendChild(select);
+				row.appendChild(remove);
+				host.appendChild(row);
+			});
+		}
+		function modelVisionProxyCustomListRowValues() {
+			const host = $("modelVisionProxyCustomList");
+			if (!host) {
+				return [];
+			}
+			return Array.from(host.querySelectorAll("select")).map((el) => el.value.trim());
+		}
+		function collectModelVisionProxyCustomListIds() {
+			return modelVisionProxyCustomListRowValues().filter(Boolean);
+		}
+		function applyModelVisionProxyToForm(m) {
+			const scope = modelVisionProxyScopeFromPreset(m);
+			const modeSelect = $("modelVisionProxySelectionMode");
+			if (modeSelect) {
+				modeSelect.value = scope;
+			}
+			const fixedId = m.visionProxyFixedModelId
+				|| (scope === "fixed" && typeof m.visionProxyModelId === "string" ? m.visionProxyModelId : "");
+			renderVisionProxyOptions($("modelVisionProxyDefault"), fixedId || "", { selfId: m.id, allowDisable: false });
+			const customIds = Array.isArray(m.visionProxyCustomModelIds) && m.visionProxyCustomModelIds.length > 0
+				? m.visionProxyCustomModelIds
+				: (scope === "custom-list" && typeof m.visionProxyModelId === "string" && m.visionProxyModelId.trim()
+					? [m.visionProxyModelId]
+					: []);
+			renderModelVisionProxyCustomListRows(customIds);
+			syncModelVisionProxyModeUi();
+		}
+		function readModelVisionProxyPayload() {
+			const scope = $("modelVisionProxySelectionMode")?.value || "inherit";
+			if (scope === "disabled") {
+				return {
+					visionProxyScope: "disabled",
+					visionProxyFixedModelId: "",
+					visionProxyCustomModelIds: [],
+					visionProxyModelId: null
+				};
+			}
+			if (scope === "fixed") {
+				const visionProxyFixedModelId = String($("modelVisionProxyDefault")?.value || "");
+				return {
+					visionProxyScope: "fixed",
+					visionProxyFixedModelId,
+					visionProxyCustomModelIds: [],
+					visionProxyModelId: visionProxyFixedModelId || undefined
+				};
+			}
+			if (scope === "custom-list") {
+				const visionProxyCustomModelIds = collectModelVisionProxyCustomListIds();
+				return {
+					visionProxyScope: "custom-list",
+					visionProxyFixedModelId: "",
+					visionProxyCustomModelIds,
+					visionProxyModelId: visionProxyCustomModelIds[0] || undefined
+				};
+			}
+			if (scope === "auto") {
+				return {
+					visionProxyScope: "auto",
+					visionProxyFixedModelId: "",
+					visionProxyCustomModelIds: [],
+					visionProxyModelId: undefined
+				};
+			}
+			return {
+				visionProxyScope: "inherit",
+				visionProxyFixedModelId: "",
+				visionProxyCustomModelIds: [],
+				visionProxyModelId: undefined
+			};
 		}
 		function hintText(h) { return h ? 'range ' + h.min + '-' + h.max + ', recommended ' + h.recommended : ''; }
 		function selectedProvider() { return $("provider").value.replace(/^✓\\s*/, ""); }
@@ -1492,7 +1714,7 @@ async function renderHtml(webview: vscode.Webview, context: vscode.ExtensionCont
 			if (saveBtn) { saveBtn.disabled = isReadOnlyModel; }
 			$("vision").checked = !!m.vision;
 			$("toolCalling").checked = m.toolCalling !== false;
-			renderVisionProxyOptions($("visionProxyModelId"), visionProxyToFormValue(m.visionProxyModelId), { selfId: m.id, autoLabel: "${escapeJs(text.modelVisionProxyAuto)}" });
+			applyModelVisionProxyToForm(m);
 			const hints = m.parameterHints || {};
 			for (const [id, key] of [["temperatureHint","temperature"],["topPHint","topP"],["maxOutputTokensHint","maxOutputTokens"]]) $(id).textContent = hintText(hints[key]);
 			setOptions($("thinking"), (hints.thinking && hints.thinking.options) || ["disabled", "enabled"], (m.thinking && m.thinking.type) || (hints.thinking && hints.thinking.recommended));
@@ -1609,7 +1831,7 @@ async function renderHtml(webview: vscode.Webview, context: vscode.ExtensionCont
 				thinking: thinking ? { type: thinking } : undefined,
 				reasoningEffort: $("reasoningEffort").value || undefined,
 				vision: $("vision").checked,
-				visionProxyModelId: formValueToVisionProxy($("visionProxyModelId").value),
+				...readModelVisionProxyPayload(),
 				toolCalling: $("toolCalling").checked,
 				builtIn: undefined
 			};
@@ -1639,6 +1861,7 @@ async function renderHtml(webview: vscode.Webview, context: vscode.ExtensionCont
 		let nextHostUiSmokeRequestId = 1;
 		const pendingHostUiSmokeSaves = new Map();
 		const pendingProviderEndpointSaves = new Map();
+		const pendingVisionProxyBaseSaves = new Map();
 		function saveCurrentModelForHostUiSmoke() {
 			const model = buildCurrentModelPayload();
 			applyModelPayloadLocally(model);
@@ -1660,6 +1883,14 @@ async function renderHtml(webview: vscode.Webview, context: vscode.ExtensionCont
 				const requestId = nextHostUiSmokeRequestId++;
 				pendingProviderEndpointSaves.set(requestId, { resolve, reject });
 				post("setProviderEndpoint", { requestId, provider, profileId, baseUrl, hostUiSmoke: true });
+			});
+		}
+
+		function saveVisionProxyBaseForHostUiSmoke(visionProxyPayload) {
+			return new Promise((resolve, reject) => {
+				const requestId = nextHostUiSmokeRequestId++;
+				pendingVisionProxyBaseSaves.set(requestId, { resolve, reject });
+				post("saveVisionProxyBase", { requestId, hostUiSmoke: true, visionProxy: visionProxyPayload });
 			});
 		}
 		function waitForModelFamilyVersionsUpdated(provider, familyKey, timeoutMs = 8000) {
@@ -1821,6 +2052,65 @@ async function renderHtml(webview: vscode.Webview, context: vscode.ExtensionCont
 				defaultVersionId: versionSelect.value
 			};
 		}
+
+		async function runVisionProxyUiSmoke() {
+			const enabled = Boolean($("visionProxyEnabled")?.checked);
+			const modeSelect = $("visionProxySelectionMode");
+			if (!modeSelect) {
+				throw new Error("Host UI smoke: visionProxySelectionMode missing from config panel DOM.");
+			}
+			modeSelect.value = "custom-list";
+			modeSelect.dispatchEvent(new Event("change"));
+			const listRow = $("visionProxyCustomListRow");
+			const listHost = $("visionProxyCustomList");
+			const addBtn = $("visionProxyCustomListAdd");
+			const saveBtn = $("saveVisionProxyBase");
+			if (!listRow || !listHost || !addBtn || !saveBtn) {
+				throw new Error("Host UI smoke: vision proxy custom list controls missing.");
+			}
+			if (listRow.style.display === "none") {
+				throw new Error("Host UI smoke: vision proxy custom list row must be visible after mode change.");
+			}
+			// Ensure at least 2 rows so ordering UI is exercised.
+			addBtn.click();
+			addBtn.click();
+			const selects = Array.from(listHost.querySelectorAll("select"));
+			if (selects.length < 2) {
+				throw new Error("Host UI smoke: expected at least 2 vision proxy custom list selects.");
+			}
+			const firstSelect = selects[0];
+			if (!firstSelect) {
+				throw new Error("Host UI smoke: vision proxy custom list first select missing.");
+			}
+			const optionValues = Array.from(firstSelect.options).map((opt) => String(opt.value || "").trim()).filter(Boolean);
+			if (optionValues.length === 0) {
+				throw new Error("Host UI smoke: vision proxy model options list was empty.");
+			}
+			// Pick two values if available, otherwise reuse first (still validates persistence + UI wiring).
+			const first = optionValues[0] || "";
+			const second = optionValues.find((v) => v !== first) || first;
+			firstSelect.value = first;
+			if (selects[1]) {
+				selects[1].value = second;
+			}
+
+			// Persist via the same handler as user clicking "保存识图代理基础配置".
+			const persisted = await saveVisionProxyBaseForHostUiSmoke({
+				enabled: $("visionProxyEnabled").checked,
+				selectionMode: modeSelect.value,
+				defaultModelId: "",
+				customModelIds: [firstSelect.value, selects[1] ? selects[1].value : ""].filter(Boolean)
+			});
+			return {
+				enabled,
+				selectionMode: modeSelect.value,
+				defaultModelId: String($("visionProxyDefault")?.value || ""),
+				customModelIds: [firstSelect.value, selects[1] ? selects[1].value : ""].filter(Boolean),
+				persistedSelectionMode: String(persisted.persistedSelectionMode || ""),
+				persistedCustomModelIds: Array.isArray(persisted.persistedCustomModelIds) ? persisted.persistedCustomModelIds : [],
+				savedViaBaseButton: true
+			};
+		}
 		async function runHostUiSmokeConfig(payload) {
 			const result = {
 				ok: false,
@@ -1830,7 +2120,8 @@ async function renderHtml(webview: vscode.Webview, context: vscode.ExtensionCont
 				roundtrip: { displayName: "", temperature: "" },
 				restored: { displayName: "", temperature: "" },
 				providerEndpointUi: undefined,
-				qwenCatalogUi: undefined
+				qwenCatalogUi: undefined,
+				visionProxyUi: undefined
 			};
 			try {
 				selectModel(payload.primaryModelRuntimeId);
@@ -1850,8 +2141,13 @@ async function renderHtml(webview: vscode.Webview, context: vscode.ExtensionCont
 				selectModel(payload.primaryModelRuntimeId);
 				result.restored = snapshotCurrentModelState();
 				result.providerEndpointUi = await runProviderEndpointUiSmoke();
+				console.log("host-ui-smoke.config.endpoint.ui", result.providerEndpointUi);
 				result.modelVersionUi = await runModelVersionUiSmoke();
+				console.log("host-ui-smoke.config.model-version.ui", result.modelVersionUi);
 				result.qwenCatalogUi = await runQwenCatalogVisibilitySmoke();
+				console.log("host-ui-smoke.config.qwen-catalog.ui", result.qwenCatalogUi);
+				result.visionProxyUi = await runVisionProxyUiSmoke();
+				console.log("host-ui-smoke.config.vision-proxy.ui", result.visionProxyUi);
 				result.ok = true;
 			} catch (error) {
 				result.error = error instanceof Error ? error.message : String(error);
@@ -1953,6 +2249,16 @@ async function renderHtml(webview: vscode.Webview, context: vscode.ExtensionCont
 				syncProviderEndpointUiFromProfile(profileId);
 				const status = $("providerEndpointStatus");
 				if (status) status.textContent = "${escapeJs(text.providerEndpointSaved)}";
+			} else if (event.data && event.data.command === "visionProxyBaseSaved") {
+				const requestId = event.data.requestId;
+				const pending = pendingVisionProxyBaseSaves.get(requestId);
+				if (pending) {
+					pendingVisionProxyBaseSaves.delete(requestId);
+					pending.resolve({
+						persistedSelectionMode: String(event.data.persistedSelectionMode || ""),
+						persistedCustomModelIds: Array.isArray(event.data.persistedCustomModelIds) ? event.data.persistedCustomModelIds : []
+					});
+				}
 			} else if (event.data && event.data.command === "panelError") {
 				const message = typeof event.data.message === "string" ? event.data.message : "${escapeJs(text.operationFailed)}";
 				$("saveStatus").textContent = message;
@@ -1987,7 +2293,91 @@ async function renderHtml(webview: vscode.Webview, context: vscode.ExtensionCont
 		if (["auto", "workspace", "global"].includes(persistedWriteScope)) {
 			$("configWriteScope").value = persistedWriteScope;
 		}
+		function syncVisionProxyModeUi() {
+			const mode = $("visionProxySelectionMode")?.value || "auto";
+			const fixedRow = $("visionProxyFixedRow");
+			const listRow = $("visionProxyCustomListRow");
+			if (fixedRow) fixedRow.style.display = mode === "fixed" ? "" : "none";
+			if (listRow) listRow.style.display = mode === "custom-list" ? "" : "none";
+		}
+		function renderVisionProxyCustomListRows(ids) {
+			const host = $("visionProxyCustomList");
+			if (!host) return;
+			host.innerHTML = "";
+			const rows = Array.isArray(ids) && ids.length > 0 ? ids : [""];
+			rows.forEach((modelId, index) => {
+				const row = document.createElement("div");
+				row.className = "vision-proxy-custom-list-row";
+				const up = document.createElement("button");
+				up.type = "button";
+				up.className = "secondary";
+				up.textContent = "↑";
+				up.title = "${escapeJs(text.visionProxyCustomListMoveUpTip)}";
+				up.disabled = index === 0;
+				up.addEventListener("click", () => {
+					if (index === 0) return;
+					const next = visionProxyCustomListRowValues();
+					[next[index - 1], next[index]] = [next[index], next[index - 1]];
+					renderVisionProxyCustomListRows(next);
+				});
+				const down = document.createElement("button");
+				down.type = "button";
+				down.className = "secondary";
+				down.textContent = "↓";
+				down.title = "${escapeJs(text.visionProxyCustomListMoveDownTip)}";
+				down.disabled = index >= rows.length - 1;
+				down.addEventListener("click", () => {
+					if (index >= rows.length - 1) return;
+					const next = visionProxyCustomListRowValues();
+					[next[index], next[index + 1]] = [next[index + 1], next[index]];
+					renderVisionProxyCustomListRows(next);
+				});
+				const select = document.createElement("select");
+				renderVisionProxyOptions(select, modelId, { allowDisable: false });
+				const remove = document.createElement("button");
+				remove.type = "button";
+				remove.className = "secondary";
+				remove.textContent = "×";
+				remove.title = "${escapeJs(text.visionProxyCustomListRemoveTip)}";
+				remove.addEventListener("click", () => {
+					const next = visionProxyCustomListRowValues().filter((_, i) => i !== index);
+					renderVisionProxyCustomListRows(next.length > 0 ? next : [""]);
+				});
+				row.appendChild(up);
+				row.appendChild(down);
+				row.appendChild(select);
+				row.appendChild(remove);
+				host.appendChild(row);
+			});
+		}
+		function visionProxyCustomListRowValues() {
+			const host = $("visionProxyCustomList");
+			if (!host) return [];
+			return Array.from(host.querySelectorAll("select")).map((el) => el.value.trim());
+		}
+		function collectVisionProxyCustomListIds() {
+			return visionProxyCustomListRowValues().filter(Boolean);
+		}
+		if ($("visionProxySelectionMode")) {
+			$("visionProxySelectionMode").value = configuredVisionProxySelectionMode;
+			$("visionProxySelectionMode").addEventListener("change", syncVisionProxyModeUi);
+		}
 		renderVisionProxyOptions($("visionProxyDefault"), configuredVisionProxyDefault, { allowDisable: false });
+		renderVisionProxyCustomListRows(configuredVisionProxyCustomList);
+		syncVisionProxyModeUi();
+		$("visionProxyCustomListAdd")?.addEventListener("click", () => {
+			const next = visionProxyCustomListRowValues();
+			next.push("");
+			renderVisionProxyCustomListRows(next);
+		});
+		if ($("modelVisionProxySelectionMode")) {
+			$("modelVisionProxySelectionMode").addEventListener("change", syncModelVisionProxyModeUi);
+		}
+		$("modelVisionProxyCustomListAdd")?.addEventListener("click", () => {
+			const next = modelVisionProxyCustomListRowValues();
+			next.push("");
+			renderModelVisionProxyCustomListRows(next);
+		});
 		refreshModels(restoredModel?.provider === selectedProvider() ? restoredModel.runtimeId : initialSelection.modelRuntimeId);
 		if (typeof restoredState.scrollY === "number") setTimeout(() => window.scrollTo(0, restoredState.scrollY), 0);
 		window.addEventListener("scroll", () => persistState(), { passive: true });
@@ -2003,10 +2393,15 @@ async function renderHtml(webview: vscode.Webview, context: vscode.ExtensionCont
 		document.getElementById("saveVisionProxyPrompt").addEventListener("click", () => post("saveVisionProxyPrompt", {
 			prompt: $("visionProxyCustomPrompt").value
 		}));
-		document.getElementById("saveVisionProxyBase").addEventListener("click", () => post("saveVisionProxyBase", { visionProxy: {
-			enabled: $("visionProxyEnabled").checked,
-			defaultModelId: $("visionProxyDefault").value
-		}}));
+		document.getElementById("saveVisionProxyBase").addEventListener("click", () => {
+			const mode = $("visionProxySelectionMode")?.value || "auto";
+			post("saveVisionProxyBase", { visionProxy: {
+				enabled: $("visionProxyEnabled").checked,
+				selectionMode: mode,
+				defaultModelId: mode === "fixed" ? $("visionProxyDefault").value : "",
+				customModelIds: mode === "custom-list" ? collectVisionProxyCustomListIds() : []
+			}});
+		});
 		document.getElementById("addProviderBtn").addEventListener("click", () => {
 			const input = $("newProviderInput");
 			const value = input ? input.value.trim() : "";
@@ -2144,6 +2539,17 @@ const UI_TEXT = {
 		visionProxyHelp: "模型可按代理配置先调用另一个支持图片输入的模型生成图片描述，再由当前模型继续回答。留空默认模型时会自动选择可用的内置 Copilot 视觉模型。",
 		visionProxyEnabled: "启用识图代理",
 		visionProxyEnabledTip: "仅对模型级识图代理留空的模型生效。",
+		visionProxySelectionMode: "识图代理模型选择",
+		visionProxySelectionModeTip: "自动、固定单一模型，或自定义有序列表（与自动互斥）。",
+		visionProxyModeAuto: "自动选择",
+		visionProxyModeFixed: "指定模型",
+		visionProxyModeCustomList: "自定义列表",
+		visionProxyCustomListHelp: "限流时按顺序重试并切换；至少保留一个视觉模型。",
+		visionProxyCustomListAdd: "添加模型",
+		visionProxyCustomListAddTip: "在列表末尾添加一个视觉代理模型。",
+		visionProxyCustomListRemoveTip: "从列表移除此模型",
+		visionProxyCustomListMoveUpTip: "上移",
+		visionProxyCustomListMoveDownTip: "下移",
 		visionProxyDefault: "默认视觉模型 ID",
 		visionProxyDefaultTip: "填写任意已安装且支持 imageInput 的模型 ID，留空则自动选择内置 Copilot 视觉模型。",
 		visionProxyAuto: "自动选择可用视觉模型",
@@ -2219,7 +2625,10 @@ const UI_TEXT = {
 		vision: "视觉输入",
 		visionTip: "仅声明该模型本身是否支持原生图片输入，不决定是否使用识图代理。",
 		modelVisionProxy: "模型级视觉代理",
-		modelVisionProxyTip: "完全决定当前模型的识图代理行为。留空表示使用全局识图代理设置；选择“禁用识图代理”表示禁用该模型代理；填写模型 ID 表示强制使用该代理；不能填当前模型自己。",
+		modelVisionProxyTip: "覆盖全局识图代理：继承全局、禁用、自动、指定单一模型，或自定义有序列表（限流时按序重试）。不能选择当前模型自身。",
+		modelVisionProxySelectionModeTip: "inherit=跟随全局；disabled=本模型不走代理；auto/fixed/custom-list=本模型覆盖全局策略。",
+		modelVisionProxyModeInherit: "继承全局",
+		modelVisionProxyFixedLabel: "指定代理模型",
 		modelVisionProxyAuto: "使用全局默认 / 自动选择",
 		toolCalling: "工具调用 / Agent",
 		toolCallingTip: "声明模型是否支持 function calling。Agent 模式通常需要开启。",
@@ -2282,6 +2691,17 @@ const UI_TEXT = {
 		visionProxyHelp: "Models can follow their proxy settings to ask another image-capable model to describe images first, then continue with the current model. An empty default auto-picks an installed Copilot vision model.",
 		visionProxyEnabled: "Enable vision proxy",
 		visionProxyEnabledTip: "Applies only to models whose model-level vision proxy is left empty.",
+		visionProxySelectionMode: "Vision proxy model selection",
+		visionProxySelectionModeTip: "Auto-pick, single fixed model, or ordered custom list (mutually exclusive).",
+		visionProxyModeAuto: "Auto-pick",
+		visionProxyModeFixed: "Fixed model",
+		visionProxyModeCustomList: "Custom list",
+		visionProxyCustomListHelp: "On rate limits, retry then switch in order; keep at least one vision model.",
+		visionProxyCustomListAdd: "Add model",
+		visionProxyCustomListAddTip: "Append a vision proxy model to the list.",
+		visionProxyCustomListRemoveTip: "Remove this model from the list",
+		visionProxyCustomListMoveUpTip: "Move up",
+		visionProxyCustomListMoveDownTip: "Move down",
 		visionProxyDefault: "Default vision model ID",
 		visionProxyDefaultTip: "Use any installed image-capable model ID. Leave empty to auto-pick a built-in Copilot vision model.",
 		visionProxyAuto: "Auto-pick an available vision model",
@@ -2357,7 +2777,10 @@ const UI_TEXT = {
 		vision: "Vision Input",
 		visionTip: "Declare only whether this model itself supports native image input. It does not decide proxy behavior.",
 		modelVisionProxy: "Model Vision Proxy",
-		modelVisionProxyTip: "Fully controls this model's vision proxy behavior. Empty uses global defaults, selecting Disable turns proxying off for this model, and a model ID forces that proxy. Do not set the current model itself.",
+		modelVisionProxyTip: "Overrides global vision proxy: inherit, disable, auto, fixed model, or ordered custom list (retries on rate limits). Cannot select this model itself.",
+		modelVisionProxySelectionModeTip: "inherit=follow global; disabled=no proxy; auto/fixed/custom-list override global for this model.",
+		modelVisionProxyModeInherit: "Inherit global",
+		modelVisionProxyFixedLabel: "Fixed proxy model",
 		modelVisionProxyAuto: "Use global default / auto-pick",
 		toolCalling: "Tool Calling / Agent",
 		toolCallingTip: "Declare whether this model supports function calling. Agent mode usually requires it.",

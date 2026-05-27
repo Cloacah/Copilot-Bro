@@ -14,6 +14,7 @@ export { CHAT_INTEGRATION_SCENARIO_EXTRA_MARKERS, PLAN_PHASE_REQUIRED_CHAT_LOG_M
 
 export const CHAT_INTEGRATION_SCENARIO_PLAN_PHASES: Readonly<Record<string, readonly HostUiSmokeChatPlanPhase[]>> = {
 	"p3-global-qwen-proxy-chat": ["p3"],
+	"p3-global-qwen-proxy-custom-list": ["p3"],
 	"vision-proxy-miss": ["p3", "p6"],
 	"vision-proxy-cache-hit": ["p3"],
 	"model-switch-pro-token": ["p5"],

@@ -16,7 +16,6 @@ import { buildDisabledVisionMessage, buildFallbackPlan, buildTextFallback } from
 import { getImageAnalyzeAdapter } from "./toolCooperation/adapters/registry";
 import type { ImageAnalyzeAdapter } from "./toolCooperation/adapters/types";
 import {
-	createChatDebugDetailsText,
 	createVisionInputBindingSummary,
 	formatVisionStructuredThinkingBlock
 } from "./toolCooperation/outputSemantics";
@@ -32,14 +31,12 @@ import { createVisionTaskStack } from "./visionProtocol/visionTaskStack";
 import { collectImageRefsFromRequestMessages } from "./visionProtocol/visionMessageScan";
 import { evaluateRoiGateWithTimeout } from "./visionProtocol/roiRuntimeGuard";
 import { VisionLogEvent } from "./visionProtocol/visionLogEvents";
+import { createVisionChatSurface } from "./visionProtocol/visionChatSurface";
 
 export type VisionResponseProgress = Progress<LanguageModelResponsePart>;
 
-export interface VisionRouteReporter {
-	appendProgress(text: string): void;
-	flushProgress(): void;
-	reportChatDebug(text: string): void;
-}
+import type { VisionRouteReporter } from "./visionProtocol/visionChatSurface";
+export type { VisionRouteReporter } from "./visionProtocol/visionChatSurface";
 
 export interface VisionPreRouteInput {
 	messages: readonly vscode.LanguageModelChatRequestMessage[];
@@ -83,22 +80,9 @@ export interface VisionStrategyBranchResult {
 	shouldStop: boolean;
 }
 
+/** @deprecated Use {@link createVisionRouteReporter} / {@link VisionChatSurface.emitCompatDebug}. */
 export function reportVisionRouteChatDebug(progress: VisionResponseProgress, text: string, visible: boolean): void {
-	if (!visible) {
-		return;
-	}
-	const detailsText = createChatDebugDetailsText(text);
-	if (!detailsText) {
-		return;
-	}
-	const thinkingPart = (vscode as unknown as {
-		LanguageModelThinkingPart?: new (value: string, id?: string) => LanguageModelResponsePart;
-	}).LanguageModelThinkingPart;
-	if (thinkingPart) {
-		progress.report(new thinkingPart(detailsText, "vision-debug"));
-		return;
-	}
-	progress.report(new vscode.LanguageModelTextPart(renderChatDebugDetails(detailsText)));
+	createVisionChatSurface().emitCompatDebug(progress, visible, text);
 }
 
 export async function runVisionPreRoute(input: VisionPreRouteInput): Promise<VisionPreRouteResult> {
@@ -224,14 +208,25 @@ export async function runVisionStrategyBranch(input: VisionStrategyBranchInput):
 				}
 			);
 			if (proxyResolution.status === "not-needed") {
-				input.logger.info("vision.proxy.skipped", {
+				const fallbackReason =
+					"Proxy route was selected but vision proxy did not apply (proxy disabled, no images, or hydration found nothing to process).";
+				input.logger.warn("vision.proxy.routeMismatch", {
 					model: input.model.id,
 					...trace,
 					plannedBatchCount,
-					reason: "Proxy route selected but no image payload detected in current request messages."
+					strategy: strategySelection.strategy,
+					reason: fallbackReason
 				});
-				resolvedMessages = proxyResolution.messages;
-				input.reporter.flushProgress();
+				if (activeBatchId) {
+					failBatch(activeBatchId);
+					isolateFailedBatch(activeBatchId, new Error(fallbackReason));
+				}
+				shouldStop = await handleVisionStrategyFallback(
+					strategySelection,
+					fallbackReason,
+					input.detectionMessages,
+					input.reporter
+				);
 				break;
 			}
 			if (proxyResolution.status === "unavailable" || proxyResolution.status === "failed") {
@@ -593,8 +588,4 @@ function toRequestUint8Array(value: unknown): Uint8Array | undefined {
 		return new Uint8Array(value);
 	}
 	return undefined;
-}
-
-function renderChatDebugDetails(text: string): string {
-	return `\`\`\`[Vision Debug]\n${text}\n\`\`\``;
 }

@@ -35,6 +35,16 @@ export type HostUiSmokeQwenCatalogUiResult = {
 	defaultVersionId: string;
 };
 
+export type HostUiSmokeVisionProxyUiResult = {
+	enabled: boolean;
+	selectionMode: string;
+	defaultModelId: string;
+	customModelIds: readonly string[];
+	persistedSelectionMode?: string;
+	persistedCustomModelIds?: readonly string[];
+	savedViaBaseButton?: boolean;
+};
+
 export type HostUiSmokeConfigResult = {
 	ok: boolean;
 	initial: HostUiSmokeModelState;
@@ -45,6 +55,7 @@ export type HostUiSmokeConfigResult = {
 	providerEndpointUi?: HostUiSmokeProviderEndpointUiResult;
 	modelVersionUi?: HostUiSmokeModelVersionUiResult;
 	qwenCatalogUi?: HostUiSmokeQwenCatalogUiResult;
+	visionProxyUi?: HostUiSmokeVisionProxyUiResult;
 	error?: string;
 };
 
@@ -111,6 +122,28 @@ export function parseHostUiSmokeProviderEndpointUi(value: unknown): HostUiSmokeP
 	};
 }
 
+export function parseHostUiSmokeVisionProxyUi(value: unknown): HostUiSmokeVisionProxyUiResult | undefined {
+	if (!value || typeof value !== "object") {
+		return undefined;
+	}
+	const record = value as Record<string, unknown>;
+	const customModelIds = Array.isArray(record.customModelIds)
+		? record.customModelIds.map((entry) => String(entry)).filter(Boolean)
+		: [];
+	const persistedCustomModelIds = Array.isArray(record.persistedCustomModelIds)
+		? record.persistedCustomModelIds.map((entry) => String(entry)).filter(Boolean)
+		: undefined;
+	return {
+		enabled: record.enabled === true,
+		selectionMode: typeof record.selectionMode === "string" ? record.selectionMode : "",
+		defaultModelId: typeof record.defaultModelId === "string" ? record.defaultModelId : "",
+		customModelIds,
+		persistedSelectionMode: typeof record.persistedSelectionMode === "string" ? record.persistedSelectionMode : undefined,
+		persistedCustomModelIds,
+		savedViaBaseButton: record.savedViaBaseButton === true
+	};
+}
+
 /** Normalizes webview `hostUiSmokeResult` payload (may be partial or hostile). */
 export function parseHostUiSmokeConfigResult(value: unknown): HostUiSmokeConfigResult {
 	if (!value || typeof value !== "object") {
@@ -135,6 +168,7 @@ export function parseHostUiSmokeConfigResult(value: unknown): HostUiSmokeConfigR
 		providerEndpointUi: parseHostUiSmokeProviderEndpointUi(record.providerEndpointUi),
 		modelVersionUi: parseHostUiSmokeModelVersionUi(record.modelVersionUi),
 		qwenCatalogUi: parseHostUiSmokeQwenCatalogUi(record.qwenCatalogUi),
+		visionProxyUi: parseHostUiSmokeVisionProxyUi(record.visionProxyUi),
 		error: typeof record.error === "string" ? record.error : undefined
 	};
 }

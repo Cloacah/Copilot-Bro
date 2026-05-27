@@ -144,6 +144,9 @@ async function maybeAutoOpenHostUiSmokeConfigPanel(context: vscode.ExtensionCont
 		if (configSmokeResult.qwenCatalogUi) {
 			logger?.info("host-ui-smoke.config.qwen-catalog.ui", configSmokeResult.qwenCatalogUi);
 		}
+		if (configSmokeResult.visionProxyUi) {
+			logger?.info("host-ui-smoke.config.vision-proxy.ui", configSmokeResult.visionProxyUi);
+		}
 	}
 	logger?.info("host-ui-smoke.config.open.end");
 }

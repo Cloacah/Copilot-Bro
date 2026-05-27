@@ -15,6 +15,7 @@ If integrity blocks or pre-route ROI blocks, the request stops before strategy s
 4. **strategy-branch** — session/batch planning when images present
 5. **proxy-or-native-resolution**
    - **proxy** / **wrapper-proxy**: `resolveVisionProxyMessages`, then **roi-gate-post-proxy** (`stage: "proxy-route"`)
+      - If resolution is `not-needed` while the matrix chose proxy/wrapper-proxy, run **matrix fallback** (`handleVisionStrategyFallback`) and stop (log `vision.proxy.routeMismatch`)
    - **native**: `resolveNativeVisionStructuredMessages` / structured handoff
 6. **residual-image-guard** — applied in `provider.ts` after branch returns
 
