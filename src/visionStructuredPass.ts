@@ -1,15 +1,25 @@
 import * as vscode from "vscode";
 import { createHash } from "node:crypto";
+import path from "node:path";
+import {
+	appendVisionProxyConversationLog,
+	isVisionProxyConversationChunkLogEnabled,
+	resolveVisionProxyConversationContentMode,
+	resolveVisionProxyConversationPreviewLimits,
+	resolveVisionProxyConversationLogFilePath
+} from "./copilotBroLogPaths";
 import type { ExtensionSettings, ModelConfig } from "./types";
 import {
 	executeStructuredVisionLmWithRetry,
 	resolveStructuredVisionFormatMaxAttempts,
 	resolveStructuredVisionHttpRetry
 } from "./visionStructuredRetryPolicy";
-import { HIGH_FIDELITY_RESTORE_IMAGE_PIPELINE_SUSPENDED } from "./config/highFidelityRestoreImagePipelineSuspended";
+import { isStructuredVisionImageOutputEnabled } from "./config/highFidelityRestoreImagePipelineSuspended";
 import {
 	buildMinimalStructuredVisionFallback,
+	acceptStructuredVisionTextEvidence,
 	normalizeStructuredProxyOutput,
+	shouldUseStructuredVisionFormatFallback,
 	STRUCTURED_PROXY_CONTRACT_VERSION,
 	type ProxyBBox,
 	type ProxyStructuredOutput,
@@ -72,6 +82,72 @@ function toUint8Array(value: unknown): Uint8Array | undefined {
 	}
 	return undefined;
 }
+
+function getStreamPartTextAndKind(part: unknown): { kind: "text" | "thinking"; text: string } | undefined {
+	if (!part || typeof part !== "object") {
+		return undefined;
+	}
+	const record = part as { value?: unknown; text?: unknown };
+	const text = typeof record.value === "string"
+		? record.value
+		: typeof record.text === "string"
+			? record.text
+			: undefined;
+	if (!text) {
+		return undefined;
+	}
+	const ctorName = (part as { constructor?: { name?: string } }).constructor?.name?.toLowerCase() ?? "";
+	if (ctorName.includes("thinking") || ctorName.includes("thought")) {
+		return { kind: "thinking", text };
+	}
+	return { kind: "text", text };
+}
+
+function buildVisionProxyConvoContentFields(description: string): {
+	descriptionSha256: string;
+	contentMode: "none" | "preview" | "full";
+	descriptionPreview?: { head: string; tail: string; truncated: boolean };
+	description?: string;
+	descriptionTruncated?: boolean;
+} {
+	const env = process.env;
+	const contentMode = resolveVisionProxyConversationContentMode(env);
+	const limits = resolveVisionProxyConversationPreviewLimits(env);
+	const sha256 = createHash("sha256").update(description).digest("hex");
+	if (contentMode === "none") {
+		return { descriptionSha256: sha256, contentMode };
+	}
+	if (contentMode === "full") {
+		const truncated = limits.maxFullChars > 0 && description.length > limits.maxFullChars;
+		const value = truncated ? description.slice(0, Math.max(0, limits.maxFullChars)) : description;
+		return {
+			descriptionSha256: sha256,
+			contentMode,
+			description: value,
+			descriptionTruncated: truncated
+		};
+	}
+	const headChars = Math.max(0, limits.headChars);
+	const tailChars = Math.max(0, limits.tailChars);
+	const head = headChars > 0 ? description.slice(0, headChars) : "";
+	const tail = tailChars > 0 ? description.slice(Math.max(0, description.length - tailChars)) : "";
+	const truncated = description.length > head.length + tail.length;
+	return {
+		descriptionSha256: sha256,
+		contentMode,
+		descriptionPreview: { head, tail, truncated }
+	};
+}
+
+function resolveVisionProxyConversationLogFilePathForRuntime(): string | undefined {
+	let automationLogFile: string | undefined;
+	try {
+		automationLogFile = vscode.workspace.getConfiguration("extendedModels").get<string>("automationLogFile");
+	} catch {
+		// Extension host may not be ready; env/globalStorage fallbacks still apply.
+	}
+	return resolveVisionProxyConversationLogFilePath({ automationLogFile });
+}
 export async function resolveStructuredProxyDescription(
 	proxyModel: vscode.LanguageModelChat,
 	imageParts: readonly vscode.LanguageModelDataPart[],
@@ -79,7 +155,8 @@ export async function resolveStructuredProxyDescription(
 	settings: ExtensionSettings,
 	logger: Logger,
 	token: vscode.CancellationToken,
-	handoffIntent: VisionHandoffIntent
+	handoffIntent: VisionHandoffIntent,
+	opts: { allowInvalidFormatFallback?: boolean } = {}
 ): Promise<{ description: string; execution: ProxyExecutionSummary; structured?: ProxyStructuredOutput }> {
 	return resolveStructuredVisionDescription(
 		(imageParts, prompt, attempt, maxAttempts, cancellation, opts) =>
@@ -90,7 +167,8 @@ export async function resolveStructuredProxyDescription(
 		logger,
 		token,
 		handoffIntent,
-		"proxy"
+		"proxy",
+		opts
 	);
 }
 
@@ -102,7 +180,8 @@ export async function resolveStructuredNativeDescription(
 	settings: ExtensionSettings,
 	logger: Logger,
 	token: vscode.CancellationToken,
-	handoffIntent: VisionHandoffIntent
+	handoffIntent: VisionHandoffIntent,
+	opts: { allowInvalidFormatFallback?: boolean } = {}
 ): Promise<{ description: string; execution: ProxyExecutionSummary; structured?: ProxyStructuredOutput }> {
 	return resolveStructuredVisionDescription(
 		(parts, prompt, attempt, maxAttempts, cancellation, opts) =>
@@ -113,7 +192,8 @@ export async function resolveStructuredNativeDescription(
 		logger,
 		token,
 		handoffIntent,
-		"native"
+		"native",
+		opts
 	);
 }
 
@@ -134,10 +214,18 @@ async function resolveStructuredVisionDescription(
 	logger: Logger,
 	token: vscode.CancellationToken,
 	handoffIntent: VisionHandoffIntent,
-	route: StructuredVisionPassRoute
-): Promise<{ description: string; execution: ProxyExecutionSummary; structured?: ProxyStructuredOutput }> {
+	route: StructuredVisionPassRoute,
+	fallbackPolicy: { allowInvalidFormatFallback?: boolean }
+): Promise<{
+	description: string;
+	execution: ProxyExecutionSummary;
+	structured?: ProxyStructuredOutput;
+	formatFallbackUsed?: boolean;
+	textEvidenceUsed?: boolean;
+}> {
 	const maxAttempts = resolveStructuredVisionFormatMaxAttempts(settings);
 	let lastFailure: string | undefined;
+	let lastRaw: string | undefined;
 	let cachedStructuredPlan: ProxyStructuredOutput | undefined;
 	let replayStructuredPlan = false;
 
@@ -161,6 +249,7 @@ async function resolveStructuredVisionDescription(
 				token,
 				{ forceNonSvgMode, handoffIntent }
 			);
+			lastRaw = raw;
 			parsed = parseStructuredProxyOutput(raw, logger);
 		}
 		if (!parsed.ok) {
@@ -207,12 +296,25 @@ async function resolveStructuredVisionDescription(
 		};
 	}
 
-	const formatFallbackEligible = Boolean(
-		lastFailure?.includes("at least one visual element is required")
-		|| lastFailure?.includes("sceneSummary or element rationale is required")
-		|| lastFailure?.startsWith("invalid format:")
-	);
-	if (formatFallbackEligible) {
+	const allowLastResort = fallbackPolicy.allowInvalidFormatFallback === true;
+	if (!isStructuredVisionImageOutputEnabled(handoffIntent)) {
+		const accepted = acceptStructuredVisionTextEvidence(lastRaw, { allowTextEvidence: allowLastResort });
+		if (accepted.accepted) {
+			logger.info(route === "native" ? "vision.native.text-evidence.accepted" : "vision.proxy.text-evidence.accepted", {
+				lastFailure,
+				handoffIntent,
+				rawLength: lastRaw?.length ?? 0,
+				reason: accepted.reason
+			});
+			return {
+				description: accepted.description,
+				execution: buildStructuredOnlyProxyExecutionSummary("text-evidence-only"),
+				textEvidenceUsed: true
+			};
+		}
+	}
+
+	if (shouldUseStructuredVisionFormatFallback(lastFailure, fallbackPolicy.allowInvalidFormatFallback === true)) {
 		const fallbackPlan = buildMinimalStructuredVisionFallback();
 		const execution = await executeProxyPlan(imageParts, fallbackPlan, settings, logger, handoffIntent);
 		if (execution.success) {
@@ -224,7 +326,8 @@ async function resolveStructuredVisionDescription(
 			return {
 				description: renderStructuredProxyDescription(fallbackPlan, execution, maxAttempts, maxAttempts),
 				execution,
-				structured: fallbackPlan
+				structured: fallbackPlan,
+				formatFallbackUsed: true
 			};
 		}
 	}
@@ -254,6 +357,8 @@ async function requestStructuredProxyOutput(
 		forceNonSvgMode: options.forceNonSvgMode,
 		handoffIntent
 	});
+	const convoLogFilePath = resolveVisionProxyConversationLogFilePathForRuntime();
+	const basePromptHash = createHash("sha256").update(basePrompt).digest("hex");
 
 	const visionMessage = vscode.LanguageModelChatMessage.User([
 		...imageParts,
@@ -262,12 +367,54 @@ async function requestStructuredProxyOutput(
 	const modelLabel = proxyModel.name ?? proxyModel.id ?? "proxy";
 	const runOnce = async (): Promise<string> => runWithSuppressedVisionOrchestration(async () => {
 		const response = await proxyModel.sendRequest([visionMessage], {}, token);
+		const logChunks = isVisionProxyConversationChunkLogEnabled(process.env);
+		appendVisionProxyConversationLog(convoLogFilePath, {
+			ts: new Date().toISOString(),
+			kind: "stream-start",
+			route: "proxy",
+			attempt,
+			modelLabel,
+			proxyModelId: proxyModel.id,
+			handoffIntent,
+			basePromptHash
+		});
 		let description = "";
 		for await (const chunk of response.stream) {
-			if (chunk instanceof vscode.LanguageModelTextPart) {
-				description += chunk.value;
+			const ctorName = (chunk as { constructor?: { name?: string } }).constructor?.name ?? "";
+			const info = getStreamPartTextAndKind(chunk);
+			if (!info) {
+				continue;
+			}
+			description += (description ? "\n" : "") + info.text;
+			if (logChunks) {
+				appendVisionProxyConversationLog(convoLogFilePath, {
+					ts: new Date().toISOString(),
+					kind: "stream-chunk",
+					route: "proxy",
+					attempt,
+					modelLabel,
+					proxyModelId: proxyModel.id,
+					handoffIntent,
+					streamCtor: ctorName,
+					streamKind: info.kind,
+					textLen: info.text.length,
+					basePromptHash
+				});
 			}
 		}
+		const contentFields = buildVisionProxyConvoContentFields(description);
+		appendVisionProxyConversationLog(convoLogFilePath, {
+			ts: new Date().toISOString(),
+			kind: "stream-complete",
+			route: "proxy",
+			attempt,
+			modelLabel,
+			proxyModelId: proxyModel.id,
+			handoffIntent,
+			descriptionLen: description.length,
+			basePromptHash,
+			...contentFields
+		});
 		return description;
 	});
 	if (!logger) {
@@ -318,8 +465,8 @@ async function requestStructuredNativeOutput(
 		timeoutMs: settings.requestTimeoutMs,
 		cancellation: token,
 		onEvent: (event) => {
-			if (event.type === "text") {
-				description += event.text;
+			if (event.type === "text" || event.type === "thinking") {
+				description += (description ? "\n" : "") + event.text;
 			}
 		}
 	});
@@ -396,6 +543,17 @@ function parseStructuredProxyOutput(
 	}
 	return normalizeStructuredProxyOutput(extracted.value);
 }
+function buildStructuredOnlyProxyExecutionSummary(skipReason: string): ProxyExecutionSummary {
+	return {
+		success: true,
+		retryable: false,
+		processedImages: 0,
+		warnings: [`restore-pipeline:${skipReason}`],
+		svgOutputs: [],
+		processedImageParts: []
+	};
+}
+
 async function executeProxyPlan(
 	imageParts: readonly vscode.LanguageModelDataPart[],
 	plan: ProxyStructuredOutput,
@@ -403,53 +561,35 @@ async function executeProxyPlan(
 	logger: Logger,
 	handoffIntent: VisionHandoffIntent
 ): Promise<ProxyExecutionSummary> {
-	if (handoffIntent === "describe-only") {
+	if (!isStructuredVisionImageOutputEnabled(handoffIntent)) {
+		const skipReason = handoffIntent === "describe-only"
+			? "skipped-structured-text-only"
+			: "image-postprocessing-suspended";
 		logger.info("vision.restore.pipeline.skipped", {
 			handoffIntent,
-			reason: "describe-only"
+			reason: skipReason,
+			imagePartCount: imageParts.length
 		});
-		return {
-			success: true,
-			retryable: false,
-			processedImages: 0,
-			warnings: ["restore-pipeline:skipped-describe-only"],
-			svgOutputs: [],
-			processedImageParts: Array.from(imageParts)
-		};
+		return buildStructuredOnlyProxyExecutionSummary(skipReason);
 	}
 
 	let hostUiSmokeRestoreSourceSnapshot: Buffer | undefined;
 	const analyzer = getImageAnalyzeAdapter();
 	let workingPlan = plan;
-	if (handoffIntent === "restore-artifact") {
-		if (imageParts.length === 0) {
-			logger.warn("vision.restore.pipeline.failed", { reason: "no-image-parts" });
-			return {
-				success: false,
-				retryable: true,
-				failureOrigin: "proxy-params",
-				failureReason: "restore-pipeline:no-image-parts",
-				processedImages: 0,
-				warnings: ["restore-pipeline:no-image-parts"],
-				svgOutputs: [],
-				processedImageParts: Array.from(imageParts)
-			};
-		}
-		if (HIGH_FIDELITY_RESTORE_IMAGE_PIPELINE_SUSPENDED) {
-			logger.info("vision.restore.pipeline.skipped", {
-				handoffIntent,
-				reason: "image-pipeline-suspended",
-				imagePartCount: imageParts.length
-			});
-			return {
-				success: true,
-				retryable: false,
-				processedImages: 0,
-				warnings: ["restore-pipeline:image-postprocessing-suspended"],
-				svgOutputs: [],
-				processedImageParts: Array.from(imageParts)
-			};
-		}
+	if (imageParts.length === 0) {
+		logger.warn("vision.restore.pipeline.failed", { reason: "no-image-parts" });
+		return {
+			success: false,
+			retryable: true,
+			failureOrigin: "proxy-params",
+			failureReason: "restore-pipeline:no-image-parts",
+			processedImages: 0,
+			warnings: ["restore-pipeline:no-image-parts"],
+			svgOutputs: [],
+			processedImageParts: []
+		};
+	}
+	{
 		const seed = Buffer.from(imageParts[0].data as Uint8Array);
 		if (process.env.COPILOT_BRO_UI_SMOKE === "1") {
 			hostUiSmokeRestoreSourceSnapshot = Buffer.from(seed);
@@ -469,28 +609,18 @@ async function executeProxyPlan(
 
 	const activeElements = workingPlan.elements.filter((element) => element.mode !== "none");
 	if (activeElements.length === 0) {
-		if (handoffIntent === "restore-artifact") {
-			logger.warn("vision.restore.pipeline.failed", {
-				reason: "no-actionable-elements"
-			});
-			return {
-				success: false,
-				retryable: true,
-				failureOrigin: "proxy-params",
-				failureReason: "restore-pipeline:no-actionable-elements",
-				processedImages: 0,
-				warnings: ["restore-pipeline:no-actionable-elements"],
-				svgOutputs: [],
-				processedImageParts: Array.from(imageParts)
-			};
-		}
+		logger.warn("vision.restore.pipeline.failed", {
+			reason: "no-actionable-elements"
+		});
 		return {
-			success: true,
-			retryable: false,
+			success: false,
+			retryable: true,
+			failureOrigin: "proxy-params",
+			failureReason: "restore-pipeline:no-actionable-elements",
 			processedImages: 0,
-			warnings: [],
+			warnings: ["restore-pipeline:no-actionable-elements"],
 			svgOutputs: [],
-			processedImageParts: Array.from(imageParts)
+			processedImageParts: []
 		};
 	}
 
@@ -550,7 +680,7 @@ async function executeProxyPlan(
 		processedImages,
 		warnings,
 		svgOutputs,
-		processedImageParts: processedParts.length > 0 ? processedParts : Array.from(imageParts)
+		processedImageParts: processedParts
 	};
 }
 
@@ -1101,3 +1231,4 @@ function renderProxyDebugDetails(summary: string, lines: string[]): string {
 		""
 	].join("\n");
 }
+

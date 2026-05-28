@@ -38,6 +38,31 @@ test("extractJsonObjectFromVisionText accepts prose around a valid contract obje
 	assert.equal((extracted.value as { contract?: string }).contract, "vision-proxy-contract-v3");
 });
 
+test("extractJsonObjectFromVisionText collapses pathological newlines to parse near-JSON", () => {
+	const raw = [
+		"```json",
+		"{",
+		'  "contract": "vision-proxy-contract-v3",',
+		'  "sceneSummary": "a',
+		'  b",',
+		'  "observations": [],',
+		'  "recognizedText": [],',
+		'  "layout": [],',
+		'  "elements": [',
+		'    { "elementId": "a", "label": "x", "mode": "none", "confidence": 0.9, "rationale": "r",',
+		'      "observations": [], "recognizedText": [], "layout": [],',
+		'      "regions": [ { "label": "r", "bbox": { "x": 0, "y": 0, "w": 1, "h": 1 }, "confidence": 0.9, "priority": 1, "rationale": "r" } ]',
+		"    }",
+		"  ]",
+		"}",
+		"```"
+	].join("\n");
+	const extracted = extractJsonObjectFromVisionText(raw);
+	assert.ok(extracted);
+	assert.equal(extracted.repaired, true);
+	assert.equal((extracted.value as { contract?: string }).contract, "vision-proxy-contract-v3");
+});
+
 test("repairUnbalancedJsonBrackets closes a truncated outer object", () => {
 	const truncated = buildProbeContractJson({ unclosed: true });
 	const repaired = repairUnbalancedJsonBrackets(truncated);

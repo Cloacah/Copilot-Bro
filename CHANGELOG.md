@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Vision proxy robustness** — when the high-fidelity restore pipeline is suspended, effective handoff is forced to `describe-only`; proxy candidate chain advances on structured-pass failure; last custom-list candidate may accept non-JSON text evidence; image path hydration is limited to the current user turn; format-fallback and text-evidence results are not written to the vision description cache.
+- **Vision proxy JSON repair** — post-parse key canonicalization for GLM-style split tokens (e.g. `"element Id"` → `elementId`), split-decimal literal repair (`0 . 91` → `0.91`), and relaxed contract/mode normalization so repaired near-JSON can pass v3 element validation.
+- **Vision proxy conversation logs** — `vision-proxy-convo-*.jsonl` under extension global storage (or `COPILOT_BRO_LOG_FILE` / `~/.copilot-bro/logs`); stream-complete records optional preview/full proxy text with env toggles (`COPILOT_BRO_VISION_PROXY_CONVO_LOG_*`); chunk logging off by default.
+
 ### Changed
 
 - **Zhipu catalog scrape** — scrape [BigModel model docs](https://docs.bigmodel.cn/cn/guide/models/) per-model tab variants and per-tab parameters; hub-only slugs are no longer emitted as callable families (e.g. `GLM-4.1V-Thinking` is represented by `glm-4.1v-thinking-flash` and `glm-4.1v-thinking-flashx`).
@@ -13,6 +19,7 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
+- **Vision proxy GLM structured output** — pathological newlines and token-per-line JSON from Zhipu vision models no longer fail with `at least one visual element is required` after `vision.proxy.format.repaired`; structured v3 evidence can complete on the first successful proxy candidate without relying on text-evidence fallback.
 - **Wrapped (builtin) vision routing** — `wrapperProxyAvailable` follows wrapped models when global/model proxy policy is enabled, so the compatibility matrix can select `wrapper-proxy` instead of always degrading.
 - **Proxy route mismatch** — when the matrix selects proxy/wrapper-proxy but `resolveVisionProxyMessages` returns `not-needed`, the request now uses matrix fallback instead of silently continuing (which relied on the residual-image guard).
 - **Per-model vision proxy `auto`** — `effective.enabled` is `false` when the model has native vision, matching `visionProxyPolicy` `native-default`.

@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { buildVisionPromptContract } from "../toolCooperation/visionPromptContract";
 import {
 	resolveVisionHandoffIntent,
-	resolveVisionHandoffIntentForTurn
+	resolveVisionHandoffIntentForTurn,
+	resolveEffectiveVisionHandoffIntentForTurn
 } from "../visionProtocol/visionHandoffIntent";
 
 test("resolveVisionHandoffIntent detects describe-only markers", () => {
@@ -42,5 +43,25 @@ test("resolveVisionHandoffIntentForTurn prefers user describe over high-fidelity
 			highFidelity
 		),
 		"restore-artifact"
+	);
+});
+
+test("resolveEffectiveVisionHandoffIntentForTurn forces describe-only when restore pipeline is suspended", () => {
+	const highFidelity = buildVisionPromptContract("v1");
+	assert.equal(
+		resolveEffectiveVisionHandoffIntentForTurn(
+			"[host-ui-p7-restore] Perfect vector restoration of this real UI button image.",
+			highFidelity,
+			{ isRestorePipelineSuspended: true }
+		),
+		"describe-only"
+	);
+	assert.equal(
+		resolveEffectiveVisionHandoffIntentForTurn(
+			"describe-only: summarize in one sentence",
+			highFidelity,
+			{ isRestorePipelineSuspended: true }
+		),
+		"describe-only"
 	);
 });

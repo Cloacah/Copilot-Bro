@@ -2,6 +2,8 @@
  * Shared JSON extraction for vision model outputs (proxy contract + native VisionBatchResult).
  */
 
+import { canonicalizeVisionProxyParsedJson } from "./visionJsonCanonicalize";
+
 export interface VisionJsonExtractResult {
 	value: unknown;
 	repaired: boolean;
@@ -14,7 +16,8 @@ export function extractJsonObjectFromVisionText(raw: string): VisionJsonExtractR
 	}
 	const direct = safeJsonParse(trimmed);
 	if (direct && typeof direct === "object") {
-		return { value: direct, repaired: false };
+		const canonical = canonicalizeVisionProxyParsedJson(direct);
+		return { value: canonical.value, repaired: canonical.remapped };
 	}
 	const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
 	if (fenceMatch?.[1]) {
@@ -56,7 +59,8 @@ function parseWithOptionalRepair(input: string): VisionJsonExtractResult | undef
 	for (const candidate of buildJsonRepairCandidates(input)) {
 		const parsed = safeJsonParse(candidate);
 		if (parsed && typeof parsed === "object") {
-			return { value: parsed, repaired: candidate !== input };
+			const canonical = canonicalizeVisionProxyParsedJson(parsed);
+			return { value: canonical.value, repaired: candidate !== input || canonical.remapped };
 		}
 	}
 	return undefined;
@@ -72,10 +76,47 @@ function buildJsonRepairCandidates(input: string): string[] {
 		}
 	};
 	push(trimmed);
+	push(repairSplitDecimalLiterals(trimmed));
 	push(repairCommonJsonDefects(trimmed));
+	push(repairCommonJsonDefects(repairSplitDecimalLiterals(trimmed)));
 	push(repairUnbalancedJsonBrackets(trimmed));
 	push(repairCommonJsonDefects(repairUnbalancedJsonBrackets(trimmed)));
+	// Last-resort: some vision proxy models emit near-JSON with pathological newlines/whitespace
+	// (e.g. every token on its own line, or raw newlines embedded inside JSON strings).
+	// We only use this for parsing, and only when the input clearly contains lots of line breaks.
+	if (shouldAttemptWhitespaceCollapse(trimmed)) {
+		const collapsed = collapseWhitespaceForJsonParsing(trimmed);
+		push(collapsed);
+		push(repairSplitDecimalLiterals(collapsed));
+		push(repairCommonJsonDefects(collapsed));
+		push(repairCommonJsonDefects(repairSplitDecimalLiterals(collapsed)));
+	}
 	return candidates;
+}
+
+/** GLM-style outputs sometimes split decimals: `0 . 91` → `0.91`. */
+export function repairSplitDecimalLiterals(input: string): string {
+	return input.replace(/(\d)\s*\.\s*(\d+)/gu, "$1.$2");
+}
+
+function shouldAttemptWhitespaceCollapse(input: string): boolean {
+	const newlineCount = (input.match(/\n/g) ?? []).length;
+	// Heuristic: avoid touching "normal" compact JSON; target the weird token-per-line outputs.
+	if (newlineCount >= 20) {
+		return true;
+	}
+	// Some providers insert CRLF or lots of tabs/spaces without many \n.
+	const hasWeirdRuns = /[\r\t]/.test(input) || /\n\s+\S/.test(input);
+	return newlineCount > 0 && hasWeirdRuns;
+}
+
+function collapseWhitespaceForJsonParsing(input: string): string {
+	// Replace CR/LF/TAB with spaces, then collapse multi-space sequences.
+	// This intentionally modifies whitespace inside strings too (turning raw newlines into spaces),
+	// which makes otherwise-invalid JSON strings parseable while preserving content meaning.
+	let text = input.replace(/[\r\n\t]+/gu, " ");
+	text = text.replace(/ {2,}/gu, " ");
+	return text.trim();
 }
 
 /** Lightweight repairs (no extra dependency): trailing commas, strip BOM. */

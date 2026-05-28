@@ -5,7 +5,7 @@ import {
 	isVisionProxyFatalFailure,
 	isVisionProxyRateLimitFailure
 } from "../providerTransientErrors";
-import { runVisionProxyDescriptionWithRetry } from "../visionProxyRetryCoordinator";
+import { runVisionProxyCandidateChain, runVisionProxyDescriptionWithRetry } from "../visionProxyRetryCoordinator";
 import type { ExtensionSettings } from "../types";
 import type { Logger } from "../logger";
 import { visionProxyFixture } from "./visionProxyTestFixtures";
@@ -75,4 +75,25 @@ test("VPR-04 runVisionProxyDescriptionWithRetry rethrows after max attempts", as
 		),
 		/Too Many Requests/
 	);
+});
+
+test("VPR-05 runVisionProxyCandidateChain switches to next candidate on thrown failure", async () => {
+	const logger = mockLogger();
+	const settings = testSettings();
+	const candidates = [
+		{ chatModel: {} as unknown as never, configuredId: "a" },
+		{ chatModel: {} as unknown as never, configuredId: "b" },
+		{ chatModel: {} as unknown as never, configuredId: "c" }
+	];
+
+	let calls = 0;
+	const result = await runVisionProxyCandidateChain(candidates, settings, logger, async (candidate) => {
+		calls += 1;
+		if (candidate.configuredId !== "c") {
+			throw new Error(`fail:${candidate.configuredId}`);
+		}
+		return "ok";
+	});
+	assert.equal(result, "ok");
+	assert.equal(calls, 3);
 });

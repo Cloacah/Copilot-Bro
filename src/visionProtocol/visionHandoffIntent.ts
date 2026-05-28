@@ -44,3 +44,20 @@ export function resolveVisionHandoffIntentForTurn(
 	}
 	return resolveVisionHandoffIntent(proxyConfigPrompt);
 }
+
+/**
+ * Effective handoff intent for the current runtime.
+ *
+ * When the high-fidelity restore pipeline is suspended, restoration tasks cannot be executed and
+ * should not be requested from vision proxy models. Force describe-only to keep outputs aligned.
+ */
+export function resolveEffectiveVisionHandoffIntentForTurn(
+	userTurnPrompt: string,
+	proxyConfigPrompt: string,
+	opts: { isRestorePipelineSuspended: boolean }
+): VisionHandoffIntent {
+	if (opts.isRestorePipelineSuspended) {
+		return "describe-only";
+	}
+	return resolveVisionHandoffIntentForTurn(userTurnPrompt, proxyConfigPrompt);
+}

@@ -14,3 +14,14 @@ test("vision orchestration suppression is scoped to async context", async () => 
 	});
 	assert.equal(isVisionOrchestrationSuppressed(), false);
 });
+
+test("vision orchestration suppression depth survives promise ticks", async () => {
+	await runWithSuppressedVisionOrchestration(async () => {
+		await new Promise<void>((resolve) => {
+			setImmediate(() => {
+				assert.equal(isVisionOrchestrationSuppressed(), true);
+				resolve();
+			});
+		});
+	});
+});

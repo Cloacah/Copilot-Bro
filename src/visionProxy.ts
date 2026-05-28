@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import type { ExtensionSettings, ModelConfig } from "./types";
 import { STRUCTURED_PROXY_CONTRACT_VERSION } from "./visionProxyStructuredPlan";
 import { resolveImageMimeType } from "./toolCooperation/imageMime";
+import { shouldPersistVisionImageArtifactsFromExecution } from "./config/highFidelityRestoreImagePipelineSuspended";
 import { saveVisionArtifact } from "./toolCooperation/visionArtifactStore";
 import { countRequestImageParts } from "./visionProtocol/visionMessageScan";
 import {
@@ -118,29 +119,54 @@ export async function resolveVisionProxyMessages(
         };
     }
 
-	const batch = await runVisionProxyCandidateChain(candidates, settings, logger, (candidate) =>
-		applyStructuredVisionToMessageBatch(buildVisionProxyBatchInput({
-			candidate,
-			hydratedMessages,
-			fallbackMessages: messages,
-			model,
-			settings,
-			logger,
-			token,
-			options
-		}))
-	);
-	return {
-		messages: batch.messages,
-		status: batch.status,
-		error: batch.error,
-		cacheHitCount: batch.cacheHitCount,
-		cacheMissCount: batch.cacheMissCount
-	};
+	try {
+		const batch = await runVisionProxyCandidateChain(candidates, settings, logger, (candidate, candidateIndex, candidateCount) =>
+			applyStructuredVisionToMessageBatch(buildVisionProxyBatchInput({
+				candidate,
+				candidateIndex,
+				candidateCount,
+				hydratedMessages,
+				fallbackMessages: messages,
+				model,
+				settings,
+				logger,
+				token,
+				options
+			})).then((result) => {
+				// IMPORTANT: status:"failed" must participate in candidate-chain switching.
+				// Returning `{ status:"failed" }` would otherwise be treated as a successful invoke,
+				// preventing `runVisionProxyCandidateChain` from trying the next configured model.
+				if (result.status === "failed") {
+					throw new Error(result.error ?? errorMessages.visionProxyFailed);
+				}
+				return result;
+			})
+		);
+		return {
+			messages: batch.messages,
+			status: batch.status,
+			error: batch.error,
+			cacheHitCount: batch.cacheHitCount,
+			cacheMissCount: batch.cacheMissCount
+		};
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		logger.warn("vision.proxy.failed", { model: model.id, error: message });
+		if (options.reportFailure) {
+			return { messages: hydratedMessages, status: "failed", error: errorMessages.visionProxyFailed };
+		}
+		return {
+			messages: replaceImagesWithText(hydratedMessages, errorMessages.visionProxyFailed),
+			status: "failed",
+			error: errorMessages.visionProxyFailed
+		};
+	}
 }
 
 function buildVisionProxyBatchInput(input: {
 	candidate: VisionProxyCandidate;
+	candidateIndex: number;
+	candidateCount: number;
 	hydratedMessages: readonly vscode.LanguageModelChatRequestMessage[];
 	fallbackMessages: readonly vscode.LanguageModelChatRequestMessage[];
 	model: ModelConfig;
@@ -149,7 +175,7 @@ function buildVisionProxyBatchInput(input: {
 	token: vscode.CancellationToken;
 	options: ResolveVisionProxyOptions;
 }) {
-	const { candidate, hydratedMessages, fallbackMessages, model, settings, logger, token, options } = input;
+	const { candidate, candidateIndex, candidateCount, hydratedMessages, fallbackMessages, model, settings, logger, token, options } = input;
 	const proxyModel = candidate.chatModel;
 	const proxyModelId = candidate.configuredId;
 	return {
@@ -169,7 +195,9 @@ function buildVisionProxyBatchInput(input: {
 		buildCacheKeyModelId: () => proxyModel.id,
 		resolveDescription: (imageParts: readonly vscode.LanguageModelDataPart[], finalPrompt: string, handoffIntent: VisionHandoffIntent) =>
 			runVisionProxyDescriptionWithRetry(
-				() => resolveStructuredProxyDescription(proxyModel, imageParts, finalPrompt, settings, logger, token, handoffIntent),
+				() => resolveStructuredProxyDescription(proxyModel, imageParts, finalPrompt, settings, logger, token, handoffIntent, {
+					allowInvalidFormatFallback: candidateIndex === candidateCount - 1
+				}),
 				settings,
 				logger,
 				{ modelLabel: proxyModelId, route: "proxy" }
@@ -237,8 +265,24 @@ async function hydrateImagePartsFromTextPaths(
     let hydratedCount = 0;
     const hydratedMessages = [];
     const seenPaths = new Set();
-    for (const message of messages) {
-        const canHydrateMessageText = shouldHydrateTextPathsForMessage(message, policy);
+	const lastUserIndex = (() => {
+		for (let i = messages.length - 1; i >= 0; i -= 1) {
+			const role = String(messages[i]?.role ?? "").trim().toLowerCase();
+			if (role === "user") {
+				return i;
+			}
+		}
+		return -1;
+	})();
+
+    for (let messageIndex = 0; messageIndex < messages.length; messageIndex += 1) {
+		const message = messages[messageIndex]!;
+		const role = String(message.role ?? "").trim().toLowerCase();
+        const canHydrateMessageText = shouldHydrateTextPathsForMessage(message, policy)
+			&& (
+				policy.scope === "all"
+				|| (policy.scope === "last-user-only" && role === "user" && messageIndex === lastUserIndex)
+			);
         const nextParts = [];
         for (const part of message.content) {
             nextParts.push(part);
@@ -530,7 +574,7 @@ async function persistStructuredVisionEvidence(
             description: trimmedDescription
         });
         ids.push(id);
-        const taskResult = await persistStructuredVisionTaskArtifacts(id, imagePart, execution, logger);
+        const taskResult = await persistStructuredVisionTaskArtifacts(id, imagePart, execution, handoffIntent, logger);
         taskStackIds.push(...taskResult.taskStackIds);
         artifactIds.push(...taskResult.artifactIds);
     }
@@ -540,8 +584,17 @@ async function persistStructuredVisionTaskArtifacts(
 	evidenceId: string,
 	imagePart: vscode.LanguageModelDataPart,
 	execution: ProxyExecutionSummary | undefined,
+	handoffIntent: VisionHandoffIntent,
 	logger: Logger
 ): Promise<{ taskStackIds: string[]; artifactIds: string[] }> {
+    if (!shouldPersistVisionImageArtifactsFromExecution(handoffIntent, execution)) {
+        const stack = createVisionTaskStack(evidenceId, ["describe", "complete"]);
+        for (const task of stack.tasks) {
+            updateVisionTaskStatus(stack.id, task.id, "running");
+            updateVisionTaskStatus(stack.id, task.id, "completed");
+        }
+        return { taskStackIds: [stack.id], artifactIds: [] };
+    }
     const hasSvg = Boolean(execution?.svgOutputs.length);
     const hasImage = Boolean(execution?.processedImageParts?.length);
     const stack = createVisionTaskStack(evidenceId, [
@@ -557,7 +610,7 @@ async function persistStructuredVisionTaskArtifacts(
         updateVisionTaskStatus(stack.id, next.id, "running");
         try {
             if (next.kind === "extract-image") {
-                for (const processedPart of execution?.processedImageParts ?? [imagePart]) {
+                for (const processedPart of execution?.processedImageParts ?? []) {
                     const bytes = toUint8Array(processedPart.data);
                     if (!bytes) {
                         continue;
@@ -707,7 +760,9 @@ export async function resolveNativeVisionStructuredMessages(
 		buildFinalPrompt: () => settings.visionProcessing.highFidelityPrompt,
 		buildCacheKeyModelId: () => `native:${model.id}`,
 		resolveDescription: (imageParts, finalPrompt, handoffIntent) =>
-			resolveStructuredNativeDescription(model, apiKey, imageParts, finalPrompt, settings, logger, token, handoffIntent),
+			resolveStructuredNativeDescription(model, apiKey, imageParts, finalPrompt, settings, logger, token, handoffIntent, {
+				allowInvalidFormatFallback: true
+			}),
 		getDescriptionFromCache: (cacheKey) => visionProxyDescriptionCache.get(cacheKey),
 		setDescriptionInCache: (cacheKey, description) => setVisionProxyCachedDescription(cacheKey, description),
 		buildVisionCacheKey: buildVisionProxyCacheKey,

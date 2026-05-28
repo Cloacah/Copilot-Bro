@@ -58,7 +58,7 @@ export function normalizeStructuredProxyOutput(value: unknown): { ok: true; valu
 		return { ok: false, error: "payload must be an object" };
 	}
 	const record = value as Record<string, unknown>;
-	const contract = typeof record.contract === "string" ? record.contract.trim() : "";
+	const contract = normalizeContractValue(record.contract);
 	if (
 		contract !== STRUCTURED_PROXY_CONTRACT_VERSION
 		&& contract !== "vision-proxy-contract-v2"
@@ -175,9 +175,30 @@ function normalizeElement(value: unknown, index: number): ProxyVisualElement | u
 	};
 }
 
+function normalizeContractValue(value: unknown): string {
+	if (typeof value !== "string") {
+		return "";
+	}
+	const trimmed = value.trim();
+	const compact = trimmed.replace(/\s+/gu, "").toLowerCase();
+	if (compact === "vision-proxy-contract-v3" || compact === "visionproxycontractv3") {
+		return STRUCTURED_PROXY_CONTRACT_VERSION;
+	}
+	if (compact === "vision-proxy-contract-v2" || compact === "visionproxycontractv2") {
+		return "vision-proxy-contract-v2";
+	}
+	return trimmed;
+}
+
 function normalizeMode(value: unknown): ProxyPlanMode | undefined {
 	if (value === "image" || value === "svg" || value === "none") {
 		return value;
+	}
+	if (typeof value === "string") {
+		const compact = value.replace(/\s+/gu, "").toLowerCase();
+		if (compact === "image" || compact === "svg" || compact === "none") {
+			return compact;
+		}
 	}
 	return undefined;
 }
@@ -308,6 +329,41 @@ function asHexColor(value: unknown): string | undefined {
  * Valid v3 plan when the vision model returns YAML without elements (e.g. solid-color smoke PNG).
  * Keeps describe-only / native high-fidelity paths alive and allows evidence persistence.
  */
+/** Format-fallback is last-resort only (proxy: final candidate in custom-list chain). */
+export function shouldUseStructuredVisionFormatFallback(
+	lastFailure: string | undefined,
+	allowInvalidFormatFallback: boolean
+): boolean {
+	if (!allowInvalidFormatFallback || !lastFailure) {
+		return false;
+	}
+	return lastFailure.includes("at least one visual element is required")
+		|| lastFailure.includes("sceneSummary or element rationale is required")
+		|| lastFailure.startsWith("invalid format:");
+}
+
+export function acceptStructuredVisionTextEvidence(
+	raw: string | undefined,
+	opts: { allowTextEvidence: boolean }
+): { accepted: true; description: string; reason: string } | { accepted: false; reason: string } {
+	if (!opts.allowTextEvidence) {
+		return { accepted: false, reason: "text-evidence-not-allowed" };
+	}
+	const value = (raw ?? "").trim();
+	if (!value) {
+		return { accepted: false, reason: "empty" };
+	}
+	// Keep a conservative bar: avoid caching/accepting short or obviously non-informative outputs.
+	if (value.length < 80) {
+		return { accepted: false, reason: "too-short" };
+	}
+	// If it looks like a raw failure blob or internal marker, reject.
+	if (value.includes("Sorry, no response was returned")) {
+		return { accepted: false, reason: "chat-no-response-marker" };
+	}
+	return { accepted: true, description: value, reason: "accepted-min-length" };
+}
+
 export function buildMinimalStructuredVisionFallback(
 	sceneSummary = "Uniform or low-detail image with no discrete visual elements."
 ): ProxyStructuredOutput {

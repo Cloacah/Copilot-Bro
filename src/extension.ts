@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { getSettings, listProviders } from "./config/settings";
 import { isHostUiSmokeMode } from "./smokeModeGate";
 import { hasWorkspaceFolders, normalizeDefaultSaveScope, toVsCodeConfigurationTarget } from "./config/configScope";
+import { registerCopilotBroLogStoragePath } from "./copilotBroLogPaths";
 import { Logger } from "./logger";
 import { clearApiKey, promptForApiKey, providerSecretKey, setDefaultApiKey } from "./secrets";
 import { ConfigPanel } from "./ui/configPanel";
@@ -17,6 +18,7 @@ function shouldEnableWrappedModelRefresh(): boolean {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+	registerCopilotBroLogStoragePath(context.globalStorageUri.fsPath);
 	logger = new Logger();
 	try {
 		logger.setLevel(getSettings().logLevel);

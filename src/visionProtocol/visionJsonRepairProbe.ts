@@ -48,6 +48,27 @@ export const VISION_JSON_REPAIR_PROBE_SAMPLES: readonly VisionJsonRepairProbeSam
 	{
 		id: "fenced-json",
 		raw: "```json\n" + buildProbeContractJson() + "\n```"
+	},
+	{
+		id: "glm-split-keys-decimals",
+		raw: [
+			"{",
+			'"contract": "vision-proxy-contract-v3",',
+			'"scene Summary": "probe tile",',
+			'"elements": [{',
+			'"element Id": "probe-btn",',
+			'"label": "Probe",',
+			'"mode": "none",',
+			'"confidence": 0 . 9,',
+			'"rationale": "solid color probe tile",',
+			'"observations": [],',
+			'"recognized Text": [],',
+			'"layout": [],',
+			'"regions": [{ "label": "tile", "bbox": { "x": 0, "y": 0, "w": 12, "h": 12 },',
+			'"confidence": 0 . 9, "priority": 1, "rationale": "full frame" }]',
+			"}]",
+			"}"
+		].join("\n")
 	}
 ];
 

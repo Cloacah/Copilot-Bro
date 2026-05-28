@@ -15,6 +15,7 @@ test("vision proxy keeps model-discovered image paths out of the proxy route whe
 	]);
 
 	assert.equal(policy.allowNonUserTextPaths, false);
+	assert.equal(policy.scope, "last-user-only");
 	assert.equal(shouldHydrateTextPathsForMessage({ role: "user" }, policy), true);
 	assert.equal(shouldHydrateTextPathsForMessage({ role: "assistant" }, policy), false);
 	assert.equal(shouldHydrateTextPathsForMessage({ role: "tool" }, policy), false);
@@ -28,6 +29,7 @@ test("vision proxy still allows non-user path hydration when the request has no 
 	]);
 
 	assert.equal(policy.allowNonUserTextPaths, true);
+	assert.equal(policy.scope, "last-user-only");
 	assert.equal(shouldHydrateTextPathsForMessage({ role: "assistant" }, policy), true);
 	assert.equal(shouldHydrateTextPathsForMessage({ role: "tool" }, policy), true);
 });

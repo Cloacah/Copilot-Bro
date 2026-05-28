@@ -1,5 +1,6 @@
 export interface ImagePathHydrationPolicy {
 	allowNonUserTextPaths: boolean;
+	scope: "all" | "last-user-only";
 }
 
 export interface ImagePathHydrationMessage {
@@ -8,10 +9,12 @@ export interface ImagePathHydrationMessage {
 }
 
 export function createImagePathHydrationPolicy(
-	messages: readonly Pick<ImagePathHydrationMessage, "content">[]
+	messages: readonly Pick<ImagePathHydrationMessage, "content">[],
+	opts: { scope?: ImagePathHydrationPolicy["scope"] } = {}
 ): ImagePathHydrationPolicy {
 	return {
-		allowNonUserTextPaths: !messages.some((message) => message.content.some((part) => isImageLikePart(part)))
+		allowNonUserTextPaths: !messages.some((message) => message.content.some((part) => isImageLikePart(part))),
+		scope: opts.scope ?? "last-user-only"
 	};
 }
 

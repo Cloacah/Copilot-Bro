@@ -17,9 +17,10 @@ import {
 	resolveVisionSourceKind
 } from "./visionMessageScan";
 import {
-	resolveVisionHandoffIntentForTurn,
+	resolveEffectiveVisionHandoffIntentForTurn,
 	type VisionHandoffIntent
 } from "./visionHandoffIntent";
+import { HIGH_FIDELITY_RESTORE_IMAGE_PIPELINE_SUSPENDED } from "../config/highFidelityRestoreImagePipelineSuspended";
 import type { VisionEvidenceRoute } from "./visionEvidenceStore";
 import { VisionLogEvent } from "./visionLogEvents";
 import { Logger } from "../logger";
@@ -54,6 +55,10 @@ export interface StructuredVisionDescriptionResult {
 	description: string;
 	execution: ProxyExecutionSummary;
 	structured?: ProxyStructuredOutput;
+	/** When true, do not cache — candidate chain should try the next proxy model. */
+	formatFallbackUsed?: boolean;
+	/** When true, do not cache — raw text evidence is last-resort only. */
+	textEvidenceUsed?: boolean;
 }
 
 type ResolveStructuredDescription = (
@@ -135,7 +140,9 @@ export async function applyStructuredVisionToMessageBatch(
 		try {
 			const finalPrompt = input.buildFinalPrompt();
 			const userTurnText = collectUserTurnTextFromParts(otherParts);
-			const handoffIntent = resolveVisionHandoffIntentForTurn(userTurnText, finalPrompt);
+			const handoffIntent = resolveEffectiveVisionHandoffIntentForTurn(userTurnText, finalPrompt, {
+				isRestorePipelineSuspended: HIGH_FIDELITY_RESTORE_IMAGE_PIPELINE_SUSPENDED
+			});
 			const cacheKey = input.buildVisionCacheKey(imageParts, finalPrompt, input.buildCacheKeyModelId());
 			let description = input.getDescriptionFromCache(cacheKey);
 			let executionSummary: ProxyExecutionSummary | undefined;
@@ -176,7 +183,7 @@ export async function applyStructuredVisionToMessageBatch(
 					logStructuredSnapshot(input, resolved.structured, { sourceKind, toolName });
 					emitExecutedStructuredProgress(input, resolved.structured, { sourceKind, toolName });
 				}
-				if (description.trim()) {
+				if (description.trim() && !resolved.formatFallbackUsed && !resolved.textEvidenceUsed) {
 					input.setDescriptionInCache(cacheKey, description);
 				}
 			}

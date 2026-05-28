@@ -64,7 +64,7 @@ export async function runVisionProxyCandidateChain<T>(
 	candidates: readonly VisionProxyCandidate[],
 	settings: ExtensionSettings,
 	logger: Logger,
-	invoke: (candidate: VisionProxyCandidate) => Promise<T>
+	invoke: (candidate: VisionProxyCandidate, candidateIndex: number, candidateCount: number) => Promise<T>
 ): Promise<T> {
 	if (candidates.length === 0) {
 		throw new Error("vision proxy candidate chain is empty");
@@ -74,7 +74,7 @@ export async function runVisionProxyCandidateChain<T>(
 	for (let index = 0; index < candidates.length; index += 1) {
 		const candidate = candidates[index]!;
 		try {
-			return await invoke(candidate);
+			return await invoke(candidate, index, candidates.length);
 		} catch (error) {
 			lastError = error;
 			const next = candidates[index + 1];

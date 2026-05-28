@@ -32,6 +32,7 @@ import { collectImageRefsFromRequestMessages } from "./visionProtocol/visionMess
 import { evaluateRoiGateWithTimeout } from "./visionProtocol/roiRuntimeGuard";
 import { VisionLogEvent } from "./visionProtocol/visionLogEvents";
 import { createVisionChatSurface } from "./visionProtocol/visionChatSurface";
+import { isVisionOrchestrationSuppressed } from "./visionOrchestrationContext";
 
 export type VisionResponseProgress = Progress<LanguageModelResponsePart>;
 
@@ -307,6 +308,9 @@ export async function runVisionStrategyBranch(input: VisionStrategyBranchInput):
 			break;
 		}
 		case "native": {
+			if (isVisionOrchestrationSuppressed()) {
+				break;
+			}
 			input.reporter.appendProgress(
 				formatVisionStatus("start", strategySelection, trace, input.settings.requestAttribution)
 			);
