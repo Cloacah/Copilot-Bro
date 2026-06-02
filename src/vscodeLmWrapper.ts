@@ -1,6 +1,8 @@
 import * as vscode from "vscode";
 import { isWrappedLanguageModelConfig } from "./config/modelIdentity";
 import type { Logger } from "./logger";
+import { collectToolResultPartText } from "./openaiCompat/toolResultContent";
+import { compactToolResultText, isToolResultCompactionDisabled } from "./openaiCompat/toolResultCompaction";
 import { estimateTokens } from "./openaiCompat/messages";
 import { resolveSelectedPromptPresetContent } from "./promptPresets";
 import type { ExtensionSettings, ModelConfig } from "./types";
@@ -128,8 +130,13 @@ export async function buildWrappedLanguageModelRequest(
 	}
 
 	for (const message of messages) {
-		requestMessages.push(buildCompatibleWrappedChatMessage(message));
-		estimatedPromptTokens += estimateTokens(message);
+		const wrappedMessage = buildCompatibleWrappedChatMessage(message);
+		requestMessages.push(wrappedMessage);
+		estimatedPromptTokens += estimateTokens({
+			role: wrappedMessage.role,
+			content: wrappedMessage.content,
+			name: message.name
+		} as vscode.LanguageModelChatRequestMessage);
 	}
 
 	return {
@@ -160,7 +167,7 @@ function collectWrappedLanguageModelConfigs(candidates: readonly vscode.Language
 	return Array.from(out.values());
 }
 
-function buildCompatibleWrappedChatMessage(message: vscode.LanguageModelChatRequestMessage): vscode.LanguageModelChatMessage {
+export function buildCompatibleWrappedChatMessage(message: vscode.LanguageModelChatRequestMessage): vscode.LanguageModelChatMessage {
 	const normalizedRole = String(message.role).trim().toLowerCase();
 	const safeRole = normalizedRole === "assistant" || normalizedRole === "tool" || normalizedRole === "user"
 		? message.role
@@ -168,7 +175,38 @@ function buildCompatibleWrappedChatMessage(message: vscode.LanguageModelChatRequ
 	// Map system/unknown roles to user role to avoid languageModelSystem proposed API requirement.
 	return new vscode.LanguageModelChatMessage(
 		safeRole,
-		[...message.content] as vscode.LanguageModelInputPart[],
+		compactWrappedLanguageModelInputParts(
+			message.content as readonly vscode.LanguageModelInputPart[]
+		),
 		message.name
 	);
+}
+
+function compactWrappedLanguageModelInputParts(
+	parts: readonly vscode.LanguageModelInputPart[]
+): vscode.LanguageModelInputPart[] {
+	return parts.map((part) => compactWrappedLanguageModelInputPart(part));
+}
+
+function compactWrappedLanguageModelInputPart(part: vscode.LanguageModelInputPart): vscode.LanguageModelInputPart {
+	if (!isWrappedToolResultPart(part) || isToolResultCompactionDisabled()) {
+		return part;
+	}
+	const raw = collectToolResultPartText(part.content as readonly unknown[]);
+	const compacted = compactToolResultText(raw);
+	if (!compacted.compacted) {
+		return part;
+	}
+	return new vscode.LanguageModelToolResultPart(
+		part.callId,
+		[new vscode.LanguageModelTextPart(compacted.text)]
+	);
+}
+
+function isWrappedToolResultPart(part: vscode.LanguageModelInputPart): part is vscode.LanguageModelToolResultPart {
+	if (!part || typeof part !== "object") {
+		return false;
+	}
+	const record = part as { callId?: unknown; content?: unknown };
+	return typeof record.callId === "string" && Array.isArray(record.content);
 }

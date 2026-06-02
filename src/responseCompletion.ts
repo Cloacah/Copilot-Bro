@@ -30,7 +30,11 @@ export function buildThinkingOnlyFallbackText(state: ChatResponseReplaySnapshot)
 		return "The provider ended the stream due to content filtering without a separate answer.";
 	}
 	if (reasoning) {
-		return "The model finished an extended reasoning phase without a separate answer block. See the thinking section above, or retry with a shorter prompt.";
+		return [
+			"The model finished an extended reasoning phase without a separate answer block.",
+			"See the thinking section above, retry with a shorter prompt, or run /compact if the session accumulated large tool/terminal outputs.",
+			"If the provider hit an output token limit, increase max output tokens when possible."
+		].join(" ");
 	}
 	return "The provider ended the stream without returning visible content. Retry the request or adjust max output tokens.";
 }

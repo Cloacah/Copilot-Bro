@@ -62,6 +62,59 @@ test("convertMessages omits tool-result image bytes from OpenAI tool text channe
 	assert.equal(JSON.stringify(converted).includes("image_url"), false);
 });
 
+test("convertMessages preserves tool protocol for all OAI-compatible providers when compacting logs", () => {
+	const hugeTerminal = `${"INFO: step\n".repeat(800)}ERROR: build failed\n${"tail line\n".repeat(200)}`;
+	const messages = [
+		{
+			role: "assistant",
+			content: [
+				{ value: "run" },
+				{ callId: "call-1", name: "run_terminal_cmd", input: { command: "npm test" } }
+			]
+		},
+		{
+			role: "user",
+			content: [
+				{ callId: "call-1", content: [{ value: hugeTerminal }] }
+			]
+		}
+	] as any;
+
+	for (const provider of ["deepseek", "zhipu", "kimi", "qwen"]) {
+		const converted = convertMessages(messages, {
+			...model,
+			provider,
+			thinking: { type: "enabled" },
+			includeReasoningInRequest: provider === "deepseek"
+		}, { user: "user", assistant: "assistant" });
+
+		assert.equal(converted[0].tool_calls?.[0].function.name, "run_terminal_cmd", provider);
+		assert.equal(converted[0].tool_calls?.[0].id, "call-1", provider);
+		const toolMessage = converted.find((entry) => entry.role === "tool");
+		assert.equal(toolMessage?.tool_call_id, "call-1", provider);
+		assert.match(String(toolMessage?.content), /ERROR: build failed/, provider);
+		assert.match(String(toolMessage?.content), /Tool output was compacted/, provider);
+	}
+});
+
+test("convertMessages does not compact valid JSON tool results", () => {
+	const payload = JSON.stringify({ matches: [{ path: "a.ts", line: 12 }] });
+	const messages = [
+		{
+			role: "assistant",
+			content: [{ callId: "call-2", name: "grep", input: { pattern: "foo" } }]
+		},
+		{
+			role: "user",
+			content: [{ callId: "call-2", content: [{ value: payload }] }]
+		}
+	] as any;
+
+	const converted = convertMessages(messages, { ...model, provider: "zhipu" }, { user: "user", assistant: "assistant" });
+	const toolMessage = converted.find((entry) => entry.role === "tool");
+	assert.equal(toolMessage?.content, payload);
+});
+
 test("convertMessages emits assistant tool calls and tool results", () => {
 	const messages = [
 		{

@@ -19,7 +19,16 @@ import { getDeclaredImageInputCapability } from "./modelCapabilities";
 import { buildAttributionHeaders, buildModelCapabilities, collectImageRefs, createRequestTrace, formatVisionStatus } from "./providerOrchestration";
 import { ensureApiKey } from "./secrets";
 import type { ChatCompletionUsage, ExtensionSettings, ModelConfig, OpenAIMessage, OpenAIToolCall, StreamEvent } from "./types";
-import { convertMessages, encodeReasoningMarker, estimateOpenAIMessageTokens, estimateTokens, normalizeToolCallId, repairReasoningToolHistory } from "./openaiCompat/messages";
+import {
+	convertMessages,
+	drainToolResultCompactionEvents,
+	encodeReasoningMarker,
+	estimateChatCompletionRequestTokens,
+	estimateTokens,
+	normalizeToolCallId,
+	repairReasoningToolHistory,
+	summarizeOpenAIMessagesFootprint
+} from "./openaiCompat/messages";
 import { applyLongTermMemoryBudget } from "./memory/memoryTokenBudget";
 import { logPromptBudgetPressure } from "./tokenBudget";
 import { buildHeaders, buildRequestBody } from "./openaiCompat/request";
@@ -250,6 +259,20 @@ export class ExtendedModelsProvider implements LanguageModelChatProvider {
 				? buildVisionPromptContract(settings.visionProcessing.spatialSchemaVersion)
 				: undefined;
 			const wrappedRequest = await buildWrappedLanguageModelRequest(this.context, settings, resolvedMessages, wrappedVisionContract);
+			const compactionEvents = drainToolResultCompactionEvents();
+			if (compactionEvents.length > 0) {
+				const originalChars = compactionEvents.reduce((sum, event) => sum + event.originalChars, 0);
+				const compactedChars = compactionEvents.reduce((sum, event) => sum + event.text.length, 0);
+				this.logger.info("request.toolResult.compacted", {
+					model: model.id,
+					transport: "vscode-lm-wrapper",
+					...trace,
+					count: compactionEvents.length,
+					originalChars,
+					compactedChars,
+					savedChars: Math.max(0, originalChars - compactedChars)
+				});
+			}
 			const replayState: ResponseReplayState = {
 				reasoningParts: [],
 				textParts: [],
@@ -331,7 +354,8 @@ export class ExtendedModelsProvider implements LanguageModelChatProvider {
 			getReasoningForAssistant: (message) => this.reasoningCache.get(fingerprintAssistantTurn(message))
 		});
 		const workspaceMemoryId = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "global";
-		const memoryBudget = applyLongTermMemoryBudget(openAiMessages, model, workspaceMemoryId, 0);
+		const reservedBeforeMemory = estimateChatCompletionRequestTokens(openAiMessages, options.tools ?? []);
+		const memoryBudget = applyLongTermMemoryBudget(openAiMessages, model, workspaceMemoryId, reservedBeforeMemory);
 		openAiMessages = memoryBudget.messages;
 		if (memoryBudget.selection.retained.length > 0) {
 			this.logger.info("memory.budget.applied", {
@@ -346,8 +370,21 @@ export class ExtendedModelsProvider implements LanguageModelChatProvider {
 		const toolChoice = getToolChoice(options);
 		const body = buildRequestBody(model, openAiMessages, options, toolChoice);
 		const headers = buildHeaders(apiKey ?? "", model, buildAttributionHeaders(settings.requestAttribution, trace));
-		const estimatedPromptTokens = estimateOpenAIMessageTokens(openAiMessages);
+		const estimatedPromptTokens = estimateChatCompletionRequestTokens(openAiMessages, options.tools ?? []);
 		logPromptBudgetPressure(this.logger, model, estimatedPromptTokens);
+		const compactionEvents = drainToolResultCompactionEvents();
+		if (compactionEvents.length > 0) {
+			const originalChars = compactionEvents.reduce((sum, event) => sum + event.originalChars, 0);
+			const compactedChars = compactionEvents.reduce((sum, event) => sum + event.text.length, 0);
+			this.logger.info("request.toolResult.compacted", {
+				model: model.id,
+				...trace,
+				count: compactionEvents.length,
+				originalChars,
+				compactedChars,
+				savedChars: Math.max(0, originalChars - compactedChars)
+			});
+		}
 		this.updateStatusBar(model, estimatedPromptTokens);
 		const replayState: ResponseReplayState = {
 			reasoningParts: [],
@@ -375,6 +412,13 @@ export class ExtendedModelsProvider implements LanguageModelChatProvider {
 			...trace,
 			summary: summarizeOpenAIMessages(body.messages)
 		});
+		if (isMessageFootprintLogEnabled(process.env)) {
+			this.logger.info("request.messages.footprint", {
+				model: model.id,
+				...trace,
+				footprint: summarizeOpenAIMessagesFootprint(body.messages)
+			});
+		}
 		this.logger.debug("request.body", {
 			...trace,
 			...body,
@@ -632,6 +676,11 @@ function summarizeOpenAIMessages(messages: readonly OpenAIMessage[]): Record<str
 		toolResultCount,
 		reasoningMessageCount
 	};
+}
+
+function isMessageFootprintLogEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+	const flag = env.COPILOT_BRO_LOG_MESSAGE_FOOTPRINT?.trim().toLowerCase();
+	return flag === "1" || flag === "true" || flag === "on";
 }
 
 function createModelTooltip(model: ModelConfig, maxInput: number, maxOutput: number, settings?: ExtensionSettings): string {

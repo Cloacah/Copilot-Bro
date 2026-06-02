@@ -6,12 +6,17 @@ All notable changes to this project are documented here.
 
 ### Added
 
+- **Tool / terminal result compaction** — oversized tool outputs are summarized before they enter model context (default when raw text exceeds ~4500 characters): preserves error/signal lines, head/tail, and consecutive duplicate collapse; valid JSON payloads up to ~48k pass through verbatim so structured tools keep working. Applies to all OpenAI-compatible providers via `convertMessages` and to **Wrapped (builtin LM)** transport via `buildCompatibleWrappedChatMessage`. Disable with `COPILOT_BRO_TOOL_RESULT_COMPACT=off`.
+- **Request token estimation** — `estimateChatCompletionRequestTokens` accounts for text, images, tool calls, tool results, and tools schema overhead; provider uses it for long-term memory token reservation and context budgeting.
+- **Request diagnostics** — optional `request.toolResult.compacted` and `request.messages.footprint` log lines (`COPILOT_BRO_LOG_MESSAGE_FOOTPRINT=1` for per-message footprint).
 - **Vision proxy robustness** — when the high-fidelity restore pipeline is suspended, effective handoff is forced to `describe-only`; proxy candidate chain advances on structured-pass failure; last custom-list candidate may accept non-JSON text evidence; image path hydration is limited to the current user turn; format-fallback and text-evidence results are not written to the vision description cache.
 - **Vision proxy JSON repair** — post-parse key canonicalization for GLM-style split tokens (e.g. `"element Id"` → `elementId`), split-decimal literal repair (`0 . 91` → `0.91`), and relaxed contract/mode normalization so repaired near-JSON can pass v3 element validation.
 - **Vision proxy conversation logs** — `vision-proxy-convo-*.jsonl` under extension global storage (or `COPILOT_BRO_LOG_FILE` / `~/.copilot-bro/logs`); stream-complete records optional preview/full proxy text with env toggles (`COPILOT_BRO_VISION_PROXY_CONVO_LOG_*`); chunk logging off by default.
 
 ### Changed
 
+- **Provider context budgeting** — memory injection and pre-request checks use the expanded token estimator instead of text-only heuristics.
+- **Thinking-only fallback copy** — when a model ends after extended reasoning without a separate answer, the user-visible hint mentions large tool/terminal buildup and `/compact` where relevant.
 - **Zhipu catalog scrape** — scrape [BigModel model docs](https://docs.bigmodel.cn/cn/guide/models/) per-model tab variants and per-tab parameters; hub-only slugs are no longer emitted as callable families (e.g. `GLM-4.1V-Thinking` is represented by `glm-4.1v-thinking-flash` and `glm-4.1v-thinking-flashx`).
 - **Zhipu model naming** — date suffixes like `250414` are treated as version ids (not display names) and grouped under stable families (e.g. `GLM 4 FlashX`).
 - **Config UI (model vision proxy)** — custom-list selector rows are width-constrained and aligned to the editor grid to avoid overflow.
@@ -19,6 +24,7 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
+- **Long tool / terminal output in agent sessions** — repeated oversized command logs no longer crowd out the answer block on thinking models (e.g. DeepSeek) that exhaust output budget after extended reasoning; compaction runs on both provider and Wrapped transports without altering tool-call protocol.
 - **Vision proxy GLM structured output** — pathological newlines and token-per-line JSON from Zhipu vision models no longer fail with `at least one visual element is required` after `vision.proxy.format.repaired`; structured v3 evidence can complete on the first successful proxy candidate without relying on text-evidence fallback.
 - **Wrapped (builtin) vision routing** — `wrapperProxyAvailable` follows wrapped models when global/model proxy policy is enabled, so the compatibility matrix can select `wrapper-proxy` instead of always degrading.
 - **Proxy route mismatch** — when the matrix selects proxy/wrapper-proxy but `resolveVisionProxyMessages` returns `not-needed`, the request now uses matrix fallback instead of silently continuing (which relied on the residual-image guard).

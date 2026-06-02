@@ -1,5 +1,20 @@
 import type { LanguageModelChatRequestMessage } from "vscode";
 import type { ModelConfig, OpenAIContentPart, OpenAIMessage, OpenAIToolCall } from "../types";
+import { collectAndCompactToolResultPartText } from "./toolResultContent";
+import { drainToolResultCompactionEvents } from "./toolResultCompaction";
+
+export { drainToolResultCompactionEvents } from "./toolResultCompaction";
+
+export {
+	estimateChatCompletionRequestTokens,
+	estimateLanguageModelPartTokens,
+	estimateOpenAIMessageContentTokens,
+	estimateOpenAIMessageTokens,
+	estimateTextTokens,
+	estimateTokens,
+	estimateToolsDefinitionTokens,
+	summarizeOpenAIMessagesFootprint
+} from "./tokenEstimate";
 
 const REASONING_MARKER_PATTERN = /<!--\s*extended-models-reasoning:([A-Za-z0-9_-]+)\s*-->/g;
 const REASONING_DETAILS_PATTERN = /<details data-extended-models-reasoning="true">[\s\S]*?<\/details>\s*/g;
@@ -112,50 +127,6 @@ export function convertMessages(
 	}
 
 	return out;
-}
-
-export function estimateTokens(input: string | LanguageModelChatRequestMessage): number {
-	if (typeof input === "string") {
-		return estimateTextTokens(input);
-	}
-
-	let tokens = 4;
-	for (const part of input.content ?? []) {
-		if (isImagePart(part)) {
-			tokens += 1024;
-		} else if (isToolCallPart(part)) {
-			tokens += estimateTextTokens(part.name) + estimateTextTokens(safeStringify(part.input ?? {}));
-		} else if (isToolResultPart(part)) {
-			tokens += estimateTextTokens(collectText(part.content));
-		} else if (isTextLikePart(part) || isThinkingPart(part)) {
-			tokens += estimateTextTokens(extractReasoningMarkers(extractTextValue(part)).text);
-		}
-	}
-	return tokens;
-}
-
-export function estimateOpenAIMessageTokens(messages: readonly OpenAIMessage[]): number {
-	let tokens = 0;
-	for (const message of messages) {
-		tokens += 4;
-		if (typeof message.content === "string") {
-			tokens += estimateTextTokens(message.content);
-		} else if (Array.isArray(message.content)) {
-			for (const part of message.content) {
-				tokens += part.type === "text" ? estimateTextTokens(part.text) : 1024;
-			}
-		}
-		if (message.reasoning_content) {
-			tokens += estimateTextTokens(message.reasoning_content);
-		}
-		for (const toolCall of message.tool_calls ?? []) {
-			tokens += estimateTextTokens(toolCall.function.name) + estimateTextTokens(toolCall.function.arguments);
-		}
-		if (message.tool_call_id) {
-			tokens += estimateTextTokens(message.tool_call_id);
-		}
-	}
-	return Math.max(1, tokens);
 }
 
 export interface ReasoningReplayLookup {
@@ -441,10 +412,6 @@ function mapRole(role: unknown, roleIds: RoleIds): "system" | "user" | "assistan
 	return "system";
 }
 
-function estimateTextTokens(text: string): number {
-	return Math.max(1, Math.ceil(text.length / 4));
-}
-
 function isTextLikePart(value: unknown): value is { value: string | readonly string[] } {
 	if (!value || typeof value !== "object") {
 		return false;
@@ -519,19 +486,7 @@ function extractTextValue(part: { value?: string | readonly string[]; text?: str
 }
 
 function collectText(content: readonly unknown[] | undefined): string {
-	let text = "";
-	for (const part of content ?? []) {
-		if (typeof part === "string") {
-			text += part;
-		} else if (isTextLikePart(part)) {
-			text += extractTextValue(part);
-		} else if (isImagePart(part)) {
-			text += "[Image binary omitted from tool result text channel]";
-		} else {
-			text += safeStringify(part);
-		}
-	}
-	return text;
+	return collectAndCompactToolResultPartText(content);
 }
 
 function createDataUrl(part: { mimeType: string; data: unknown }): string {
